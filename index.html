@@ -66,7 +66,7 @@
       .card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; }
       .card h2{ font-size:1.02em; margin:0 0 8px; }
       .card h3{ font-size:.95em; margin:12px 0 6px; }
-      .side{ position:sticky; top:64px; max-height:calc(100vh - 76px); overflow:auto; }
+      .side{ position:sticky; top:64px; }
       .tools{ position:sticky; top:64px; max-height:calc(100vh - 76px); overflow:auto; }
 
       .folder{ margin-bottom:10px; }
@@ -121,6 +121,24 @@
       audio{ width:100%; }
       .range{ width:110px; vertical-align:middle; }
       .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+      /* Drive sync: a full-width card right under the top bar so saving/sync is
+         the first thing a reader sees — it used to sit at the very bottom of the
+         long library sidebar, below the fold, and readers could not find it. */
+      .drivewrap{ max-width:1560px; margin:12px auto 0; padding:0 12px; }
+      .drive-card{ background:var(--panel); border:2px solid var(--accent); border-radius:var(--radius); padding:14px 16px; scroll-margin-top:76px; }
+      .drive-card h2{ margin:0 0 4px; font-size:1.12em; }
+      .drive-grid{ display:grid; grid-template-columns:1fr 1fr; gap:4px 26px; }
+      .btn.drive-top{ background:var(--accent-soft); border-color:var(--accent); font-weight:700; white-space:nowrap; }
+      .btn.drive-top.on{ background:var(--ok); border-color:var(--ok); color:#fff; }
+      .drive-card.flash{ animation:driveflash 1.6s ease; }
+      @keyframes driveflash{ 0%,55%{ box-shadow:0 0 0 5px var(--hl); } 100%{ box-shadow:none; } }
+      @media (prefers-reduced-motion: reduce){ .drive-card.flash{ animation:none; } }
+      details.fold{ border-top:1px solid var(--line); margin-top:10px; padding-top:8px; }
+      details.fold summary{ cursor:pointer; font-weight:600; font-size:.95em; padding:2px 0; }
+      @media (max-width:720px){
+        .drivewrap{ padding:0 8px; margin-top:8px; }
+        .drive-grid{ grid-template-columns:1fr; }
+      }
       @media (max-width:1080px){
         .layout{ grid-template-columns:230px minmax(0,1fr); }
         .tools{ grid-column:1 / -1; position:static; max-height:none; }
@@ -133,7 +151,7 @@
       }
       @media (max-width:720px){
         .layout{ grid-template-columns:minmax(0,1fr); padding:8px 8px 430px; }
-        .side{ position:static; max-height:none; }
+        .side{ position:static; }
         .reader{ padding:18px 14px; }
         .grid2{ grid-template-columns:1fr; }
         .player{ padding:7px 8px calc(7px + env(safe-area-inset-bottom)); }
@@ -152,11 +170,68 @@
     <div class="topbar">
       <button class="btn" id="btnLib">☰ Thư viện</button>
       <button class="btn primary" id="btnAddTop">＋ Thêm sách</button>
+      <button class="btn drive-top" id="btnDriveTop">☁ Drive · Chưa nối</button>
       <span class="spacer"></span>
       <label class="small muted" for="uiBig">Chữ to</label>
       <input type="checkbox" id="uiBig" />
-      <button class="btn" id="btnInstall">Cài như ứng dụng</button>
-      <button class="btn" id="btnExport">Xuất văn bản sạch</button>
+      <button class="btn" id="btnExport">💾 Lưu file</button>
+      <button class="btn" id="btnInstall">Cài app</button>
+    </div>
+
+    <!-- ============ GOOGLE DRIVE SYNC (top, always visible) ============ -->
+    <div class="drivewrap">
+      <section class="drive-card" id="drivePanel">
+        <h2>☁ Google Drive — Đồng bộ &amp; Lưu trữ</h2>
+        <p class="small" id="driveStatus">Chưa kết nối. Kết nối để sách, ghi chú và báo cáo <b>tự lưu lên Drive ngay khi có thay đổi</b>, quét lại mỗi 5 phút.</p>
+        <div class="drive-grid">
+          <div>
+            <label class="lbl" for="driveClientId">Mã ứng dụng Google (Client ID) — dán một lần</label>
+            <input class="txtin" id="driveClientId" placeholder="….apps.googleusercontent.com" style="width:100%" autocomplete="off" />
+            <details style="margin-top:4px">
+              <summary class="small" style="cursor:pointer">Lấy mã ở đâu? (miễn phí)</summary>
+              <p class="small muted">Vào <b>console.cloud.google.com</b> → <i>APIs &amp; Services → Credentials → OAuth client ID → Web application</i> → thêm địa chỉ trang này vào <i>Authorized JavaScript origins</i> → dán mã vào ô trên. Mã chỉ giữ trong phiên mở trang.</p>
+            </details>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+              <button class="btn small primary" id="btnDriveConnect">Kết nối Google Drive</button>
+              <button class="btn small hidden" id="btnDriveSwitch">Đổi tài khoản</button>
+            </div>
+            <div id="driveAccount" class="hidden" style="margin-top:8px">
+              <div class="small">Đang đăng nhập: <b id="driveAccountText"></b></div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                <button class="btn small primary" id="btnDrivePin">Dùng tài khoản hiện tại để đồng bộ</button>
+              </div>
+              <div class="small muted" id="drivePinNote" style="margin-top:4px"></div>
+            </div>
+            <label class="lbl" for="driveFolderSel">Thư mục lưu trên Drive</label>
+            <select id="driveFolderSel" style="width:100%" disabled>
+              <option value="">Thư mục “Đọc Sách Bằng Giọng Nói”</option>
+            </select>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <input class="txtin" id="driveNewFolder" placeholder="Tên thư mục mới" style="flex:1" />
+              <button class="btn small" id="btnDriveFolderNew">Tạo thư mục</button>
+            </div>
+          </div>
+          <div>
+            <label class="lbl">Lưu &amp; đồng bộ</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn small primary" id="btnDriveSyncNow">💾 Đồng bộ ngay</button>
+              <button class="btn small" id="btnDriveReports">Lưu báo cáo lên Drive</button>
+              <button class="btn small" id="btnDriveAuto">Tự đồng bộ: Bật</button>
+            </div>
+            <p class="small muted" id="driveLast" style="margin-top:6px"></p>
+            <div id="driveSyncedList"></div>
+            <h4 style="margin:12px 0 4px;font-size:.95em">Mở file trên Drive</h4>
+            <div class="small" id="driveCrumb" style="margin-bottom:4px"></div>
+            <div style="display:flex;gap:6px">
+              <input class="txtin" id="driveSearchQ" placeholder="Tìm file trên Drive…" style="flex:1" />
+              <button class="btn small" id="btnDriveSearch">Tìm</button>
+            </div>
+            <div id="driveBrowseList" style="margin-top:6px">
+              <p class="muted small">Kết nối Drive để chọn file đưa vào thư viện.</p>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
     <div class="layout">
@@ -166,7 +241,7 @@
         <div class="dropzone" id="dropzone">
           Kéo thả file vào đây hoặc
           <button class="btn small primary" id="btnPick">Chọn file</button>
-          <div class="small" style="margin-top:6px">PDF · Word (.docx) · EPUB · TXT · Excel (.xlsx) · PowerPoint (.pptx) · CSV · Ảnh (OCR) · Âm thanh</div>
+          <div class="small" style="margin-top:6px">PDF · Word · EPUB · TXT · Excel · PowerPoint · Ảnh · MP3</div>
           <input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.docx,.epub,.txt,.md,.csv,.tsv,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.opus" />
         </div>
 
@@ -182,78 +257,32 @@
           <option value="chi_sim">中文 (giản thể)</option>
         </select>
 
-        <h3>Dán văn bản</h3>
-        <input class="txtin" id="pasteTitle" placeholder="Tên sách / ghi chú" style="width:100%" />
-        <textarea class="txtin" id="pasteText" placeholder="Dán nội dung sách vào đây…" style="margin-top:6px"></textarea>
-        <button class="btn small" id="btnPaste" style="margin-top:6px">Thêm vào thư viện</button>
-        <button class="btn small ghost" id="btnSample">Nạp văn bản mẫu để thử</button>
-
-        <h3>Gắn link YouTube như một cuốn sách</h3>
-        <input class="txtin" id="ytUrl" placeholder="https://www.youtube.com/watch?v=…" style="width:100%" />
-        <button class="btn small" id="btnYt" style="margin-top:6px">Thêm video vào thư viện</button>
-
-        <h3>Thư mục</h3>
-        <div style="display:flex;gap:6px">
-          <input class="txtin" id="newFolder" placeholder="Tên thư mục mới" style="flex:1" />
-          <button class="btn small" id="btnFolder">Tạo</button>
-        </div>
         <div id="libList" style="margin-top:10px"></div>
-        <p class="muted small">Sách trong bản công khai này được giữ trong phiên mở trang hiện tại. Muốn giữ lâu dài: đồng bộ lên Google Drive ở mục ngay dưới đây, hoặc dùng nút “Xuất văn bản sạch” để tải file về máy.</p>
+        <p class="muted small">Sách chỉ giữ trong phiên này — <a href="#drivePanel">đồng bộ Drive ở trên</a> để lưu lâu dài, hoặc nút “💾 Lưu file” để tải về máy.</p>
 
-        <!-- ============ GOOGLE DRIVE SYNC ============ -->
-        <div style="border:1px solid var(--accent);border-radius:var(--radius);padding:10px;margin-top:12px">
-          <h3 style="margin-top:0">Đồng bộ Google Drive</h3>
-          <p class="small" id="driveStatus">Chưa kết nối Drive. Kết nối xong, mỗi cuốn sách bạn thêm vào, mỗi lần sửa chữ, ghi chú hay báo cáo mới sẽ <b>tự lên Drive ngay lúc đó</b>; ngoài ra web còn tự quét đồng bộ lại mỗi 5 phút để bắt những gì còn sót.</p>
+        <details class="fold">
+          <summary>Dán văn bản</summary>
+          <input class="txtin" id="pasteTitle" placeholder="Tên sách" style="width:100%;margin-top:6px" />
+          <textarea class="txtin" id="pasteText" placeholder="Dán nội dung sách vào đây…" style="margin-top:6px"></textarea>
+          <button class="btn small" id="btnPaste" style="margin-top:6px">Thêm vào thư viện</button>
+          <button class="btn small ghost" id="btnSample">Văn bản mẫu để thử</button>
+        </details>
 
-          <label class="lbl" for="driveClientId">Mã ứng dụng Google (Client ID) của bạn</label>
-          <input class="txtin" id="driveClientId" placeholder="….apps.googleusercontent.com" style="width:100%" autocomplete="off" />
-          <details style="margin-top:4px">
-            <summary class="small" style="cursor:pointer">Vì sao cần mã này và lấy ở đâu? (làm một lần, miễn phí)</summary>
-            <p class="small muted">Bản công khai này là trang tĩnh, không có máy chủ giữ “chìa khoá ứng dụng” Google, nên Drive yêu cầu mã ứng dụng của chính bạn — giống cách các app Drive mã nguồn mở vẫn làm. Cách lấy: vào <b>console.cloud.google.com</b> → <i>APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Web application</i> → ở mục <i>Authorized JavaScript origins</i> điền địa chỉ gốc của trang này (ví dụ https://emu2812.github.io) → tạo và dán mã <i>….apps.googleusercontent.com</i> vào ô trên. Mã chỉ giữ trong phiên mở trang, web không lưu lại sau khi đóng trang.</p>
-          </details>
+        <details class="fold">
+          <summary>Thêm video YouTube</summary>
+          <input class="txtin" id="ytUrl" placeholder="https://www.youtube.com/watch?v=…" style="width:100%;margin-top:6px" />
+          <button class="btn small" id="btnYt" style="margin-top:6px">Thêm video vào thư viện</button>
+        </details>
 
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-            <button class="btn small primary" id="btnDriveConnect">Kết nối Google Drive</button>
-            <button class="btn small hidden" id="btnDriveSwitch">Đổi tài khoản Drive</button>
-          </div>
-
-          <div id="driveAccount" class="hidden" style="margin-top:8px">
-            <div class="small">Tài khoản đang đăng nhập: <b id="driveAccountText"></b></div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-              <button class="btn small primary" id="btnDrivePin">Dùng tài khoản hiện tại để đồng bộ</button>
-            </div>
-            <div class="small muted" id="drivePinNote" style="margin-top:4px"></div>
-          </div>
-
-          <label class="lbl" for="driveFolderSel">Thư mục trên Drive để đẩy vào</label>
-          <select id="driveFolderSel" style="width:100%" disabled>
-            <option value="">Tự dùng thư mục “Đọc Sách Bằng Giọng Nói”</option>
-          </select>
+        <details class="fold">
+          <summary>Thư mục</summary>
           <div style="display:flex;gap:6px;margin-top:6px">
-            <input class="txtin" id="driveNewFolder" placeholder="Tên thư mục mới trên Drive" style="flex:1" />
-            <button class="btn small" id="btnDriveFolderNew">Tạo thư mục</button>
+            <input class="txtin" id="newFolder" placeholder="Tên thư mục mới" style="flex:1" />
+            <button class="btn small" id="btnFolder">Tạo</button>
           </div>
+        </details>
 
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-            <button class="btn small" id="btnDriveAuto">Tự đồng bộ: Bật</button>
-            <button class="btn small primary" id="btnDriveSyncNow">Đồng bộ ngay</button>
-            <button class="btn small" id="btnDriveReports">Lưu báo cáo lên Drive</button>
-          </div>
-          <p class="small muted" id="driveLast" style="margin-top:6px"></p>
-          <div id="driveSyncedList"></div>
-
-          <h4 style="margin:12px 0 4px;font-size:.95em">Mở file trên Drive như một cuốn sách</h4>
-          <div class="small" id="driveCrumb" style="margin-bottom:4px"></div>
-          <div style="display:flex;gap:6px">
-            <input class="txtin" id="driveSearchQ" placeholder="Tìm file trên toàn Drive…" style="flex:1" />
-            <button class="btn small" id="btnDriveSearch">Tìm</button>
-          </div>
-          <div id="driveBrowseList" style="margin-top:6px">
-            <p class="muted small">Kết nối Drive để duyệt thư mục, mở và chọn bất kỳ file nào đưa vào thư viện.</p>
-          </div>
-          <p class="small muted" style="margin-top:8px">Chưa kết nối được? Bạn vẫn có thể <a href="https://drive.google.com/" target="_blank" rel="noopener">mở Google Drive</a> và tự thả vào đó các file tải về từ nút “Xuất văn bản sạch” / “Lưu báo cáo”.</p>
-        </div>
-      </aside>
+        </aside>
 
       <!-- ============ READER ============ -->
       <main>
@@ -265,20 +294,21 @@
             <select id="chapSel" style="max-width:250px"></select>
             <button class="btn small" id="btnPrevCh">‹ Trước</button>
             <button class="btn small" id="btnNextCh">Sau ›</button>
+            <button class="btn small" id="btnQuickDrive" title="Lưu sách, ghi chú và báo cáo lên Google Drive">💾 Lưu Drive</button>
           </div>
-          <div class="muted small" id="bookMeta" style="margin-top:4px">Hãy thêm sách ở cột thư viện bên trái (trên điện thoại: nút “Thư viện”).</div>
+          <div class="muted small" id="bookMeta" style="margin-top:4px">Thêm sách để bắt đầu.</div>
           <div id="mediaBox" class="hidden" style="margin-top:10px"></div>
         </div>
 
         <div class="card" style="margin-bottom:12px">
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
-            <div><label class="lbl">Phông chữ</label>
-              <select id="setFont"><option value="serif">Serif (giống sách)</option><option value="sans">Sans (dễ đọc)</option></select></div>
-            <div><label class="lbl">Cỡ chữ: <span id="fsVal">19</span>px</label>
+            <div><label class="lbl">Chữ</label>
+              <select id="setFont"><option value="serif">Serif</option><option value="sans">Sans</option></select></div>
+            <div><label class="lbl">Cỡ: <span id="fsVal">19</span>px</label>
               <input type="range" class="range" id="setSize" min="15" max="34" value="19" /></div>
             <div><label class="lbl">Giãn dòng: <span id="lhVal">1.8</span></label>
               <input type="range" class="range" id="setLH" min="1.3" max="2.6" step="0.1" value="1.8" /></div>
-            <div><label class="lbl">Nền đọc</label>
+            <div><label class="lbl">Nền</label>
               <div>
                 <button class="btn small themeBtn" data-th="giay">Giấy</button>
                 <button class="btn small themeBtn" data-th="sepia">Sepia</button>
@@ -290,9 +320,9 @@
         </div>
 
         <div class="reader font-serif theme-giay" id="reader" style="font-size:19px;line-height:1.8">
-          <p class="muted">Nội dung sách sẽ hiện ở đây. Khi nghe đọc, câu đang đọc được tô sáng và trang tự cuộn theo giọng. Chạm vào bất kỳ câu nào để sách nói đọc từ đúng chỗ đó.</p>
+          <p class="muted">Nội dung sách hiện ở đây.</p>
         </div>
-        <p class="muted small" style="margin-top:8px">Mẹo: bấm vào một câu để nghe từ câu đó. Nút ✎ ở cuối mỗi đoạn cho phép sửa chữ trực tiếp — sách nói sẽ đọc theo bản đã sửa.</p>
+        <p class="muted small" style="margin-top:8px">Chạm vào câu để nghe từ câu đó · ✎ ở cuối đoạn để sửa chữ.</p>
       </main>
 
       <!-- ============ TOOLS ============ -->
@@ -301,28 +331,28 @@
           <button data-tab="ads" class="on">Quảng cáo</button>
           <button data-tab="proof">Soát lỗi</button>
           <button data-tab="pron">Phát âm</button>
-          <button data-tab="chap">Chương &amp; thời lượng</button>
+          <button data-tab="chap">Chương</button>
           <button data-tab="trans">Dịch sách</button>
           <button data-tab="notes">Ghi chú</button>
           <button data-tab="log">Nhật ký sửa</button>
         </div>
 
         <section id="tab-ads">
-          <p class="small muted">Máy tự tìm lời mời mua hàng, số hotline, link và dấu nguồn website chèn trong sách. Bấm <b>Ẩn</b> thì sách nói bỏ qua đoạn đó; bấm <b>Giữ lại</b> thì đọc bình thường. Bạn sửa trực tiếp nội dung máy đoán được trước khi quyết định.</p>
+          <p class="small muted">Đoạn nghi quảng cáo trong sách: <b>Ẩn</b> thì không đọc, <b>Giữ lại</b> thì đọc như thường.</p>
           <button class="btn small primary" id="btnScanAds">Quét lại quảng cáo</button>
           <span class="small muted" id="adsCount"></span>
           <div id="adsList" style="margin-top:8px"></div>
         </section>
 
         <section id="tab-proof" class="hidden">
-          <p class="small muted">Các chỗ chữ có thể sai do nhận dạng (OCR) hoặc gõ nhầm: từ chứa số lẫn chữ, ký tự lạ, chữ hoa lạc giữa từ… Mỗi chỗ có gợi ý sửa — sửa lại theo ý bạn rồi nhấn <span class="kbd">Enter</span> để áp dụng cho <b>mọi chỗ giống hệt</b> trong sách.</p>
+          <p class="small muted">Chỗ chữ nghi sai (OCR/gõ nhầm) kèm gợi ý sửa. Nhấn <span class="kbd">Enter</span> để áp dụng cho mọi chỗ giống hệt.</p>
           <button class="btn small primary" id="btnScanProof">Quét lại lỗi</button>
           <span class="small muted" id="proofCount"></span>
           <div id="proofList" style="margin-top:8px"></div>
         </section>
 
         <section id="tab-pron" class="hidden">
-          <p class="small muted">Số, ngày tháng, tiền, m², số La Mã… được tự đọc thành lời tự nhiên khi nghe. Từ viết tắt thì bạn dạy cách đọc một lần — ví dụ NPK → “en nờ pê ca”, pH → “pê hát” — rồi nghe thử ngay.</p>
+          <p class="small muted">Số, ngày tháng, tiền, m²… tự đọc thành lời. Dạy cách đọc từ viết tắt một lần, ví dụ NPK → “en nờ pê ca”.</p>
           <div class="grid2">
             <div><label class="lbl">Từ viết tắt / ký hiệu</label><input class="txtin" id="pronFrom" placeholder="NPK" style="width:100%" /></div>
             <div><label class="lbl">Đọc thành</label><input class="txtin" id="pronTo" placeholder="en nờ pê ca" style="width:100%" /></div>
@@ -336,12 +366,12 @@
         </section>
 
         <section id="tab-chap" class="hidden">
-          <p class="small muted">Thời lượng nghe ước tính theo tốc độ hiện tại. Nghe hết chương này máy tự chuyển chương sau.</p>
+          <p class="small muted">Nghe hết chương tự chuyển chương sau.</p>
           <div id="chapList"></div>
         </section>
 
         <section id="tab-trans" class="hidden">
-          <p class="small muted">Dịch giữ nguyên cấu trúc: chương, tiêu đề, đoạn và thứ tự y hệt bản gốc — chỉ đổi ngôn ngữ. Bản dịch thành một cuốn riêng trong thư viện và nghe được bằng giọng đúng ngôn ngữ đích. Dịch qua dịch vụ dịch miễn phí trực tuyến nên sách dài sẽ dịch theo từng chương.</p>
+          <p class="small muted">Dịch giữ nguyên chương và đoạn như bản gốc; bản dịch nghe bằng giọng của ngôn ngữ đích.</p>
           <label class="lbl">Dịch sang</label>
           <select id="transLang" style="width:100%">
             <option value="en">English</option><option value="vi">Tiếng Việt</option>
@@ -357,14 +387,14 @@
         </section>
 
         <section id="tab-notes" class="hidden">
-          <p class="small muted">Ghi chú gắn với đúng vị trí đang đọc (theo chương và câu; với video YouTube là theo mốc giây). Bấm vào ghi chú để nhảy tới chỗ đó.</p>
-          <textarea class="txtin" id="noteText" placeholder="Viết ghi chú cho chỗ đang đọc…"></textarea>
-          <button class="btn small primary" id="btnNoteAdd" style="margin-top:6px">Lưu ghi chú tại vị trí này</button>
+          <p class="small muted">Ghi chú tại vị trí đang đọc. Bấm vào ghi chú để nhảy tới chỗ đó.</p>
+          <textarea class="txtin" id="noteText" placeholder="Viết ghi chú…"></textarea>
+          <button class="btn small primary" id="btnNoteAdd" style="margin-top:6px">Lưu ghi chú</button>
           <div id="notesList" style="margin-top:10px"></div>
         </section>
 
         <section id="tab-log" class="hidden">
-          <p class="small muted">Mọi lần sửa chữ, ẩn quảng cáo hay đổi cách đọc đều ghi lại ở đây: trước → sau, kèm ghi chú của bạn. Sách nói luôn đọc theo bản mới nhất đã sửa.</p>
+          <p class="small muted">Mọi lần sửa chữ đều ghi ở đây: trước → sau.</p>
           <div id="logList"></div>
         </section>
       </aside>
@@ -398,7 +428,7 @@
     <div class="toast hidden" id="toast"></div>
     <div class="card hidden" id="installCard" style="position:fixed;right:12px;bottom:110px;z-index:70;max-width:320px">
       <b>Cài như ứng dụng</b>
-      <p class="small muted" id="installText">Bấm nút bên dưới để cài biểu tượng riêng ra màn hình — mở lên là cửa sổ riêng như ứng dụng thật, nghe sách nói vẫn chạy khi tắt màn hình (với file âm thanh).</p>
+      <p class="small muted" id="installText">Cài biểu tượng ra màn hình để mở như ứng dụng riêng.</p>
       <button class="btn small primary" id="btnDoInstall">Cài ngay</button>
       <button class="btn small ghost" id="btnHideInstall">Để sau</button>
     </div>
@@ -976,7 +1006,7 @@ function openBook(id){
   sel.value = "0";
   $("bookMeta").textContent = b.type === "text"
     ? b.chapters.length + " chương · " + bookWords(b).toLocaleString("vi-VN") + " từ · nghe hết ~" + estMinutes(bookWords(b), S.rate) + " phút ở tốc độ hiện tại"
-    : (b.type === "youtube" ? "Video YouTube — phát ngay trong trang, ghi chú gắn theo mốc giây." : "File âm thanh — nghe như một cuốn sách nói có sẵn.");
+    : (b.type === "youtube" ? "Video YouTube" : "File âm thanh");
   renderMedia(b);
   var LANGNAMES = { vi: "Tiếng Việt", en: "English — giọng Anh/Mỹ", fr: "Français — giọng Pháp", de: "Deutsch — giọng Đức", es: "Español — giọng Tây Ban Nha", ja: "日本語 — giọng Nhật", ko: "한국어 — giọng Hàn", zh: "中文 — giọng Trung", ru: "Русский — giọng Nga" };
   var vn = $("voiceName"); if (vn) vn.textContent = "Google Dịch · " + (LANGNAMES[b.lang || "vi"] || b.lang);
@@ -1020,7 +1050,7 @@ function renderReader(){
   var r = $("reader"), b = curBook();
   document.querySelectorAll(".reader").forEach(function(el){ el.style.fontSize = $("setSize").value + "px"; el.style.lineHeight = $("setLH").value; });
   if (!b || b.type !== "text"){
-    r.innerHTML = '<p class="muted">' + (b ? "Mục này phát bằng khung nghe/xem ở trên. Ghi chú và các công cụ vẫn dùng được ở cột bên phải." : "Nội dung sách sẽ hiện ở đây. Thêm sách ở cột thư viện để bắt đầu.") + "</p>";
+    r.innerHTML = '<p class="muted">' + (b ? "Mục này phát bằng khung ở trên." : "Chưa có sách. Hãy thêm sách để bắt đầu.") + "</p>";
     S.sents = []; return;
   }
   var ch = b.chapters[S.chapIdx]; if (!ch){ r.innerHTML = '<p class="muted">Chương trống.</p>'; S.sents = []; return; }
@@ -1360,7 +1390,7 @@ function googleVoiceFailed(){
      Nghe retry the Google voice. */
   S.playing = false; updatePlayBtn();
   var vn2 = $("voiceName"); if (vn2) vn2.textContent = "Google Dịch — chưa tải được";
-  toast("Chưa tải được giọng Google Dịch — có thể do mạng chậm hoặc bị chặn. Web không đọc bằng giọng máy thay thế, vì giọng đó dễ đọc sai và đánh vần từng chữ. Hãy kiểm tra mạng rồi bấm Nghe để thử lại giọng Google.", 9000);
+  toast("Chưa tải được giọng Google Dịch — kiểm tra mạng rồi bấm Nghe để thử lại.", 7000);
 }
 function stopTestClip(){ if (S.testAudio){ try { S.testAudio.pause(); } catch (e) {} S.testAudio = null; } }
 /* The Google voice is the only reading engine, so speakCurrent has exactly one
@@ -1740,7 +1770,7 @@ function exportClean(){
   var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
   a.download = b.title.replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/\s+/g, "-") + "-sach.txt";
   document.body.appendChild(a); a.click(); a.remove();
-  toast("Đã tải văn bản sạch (đã bỏ quảng cáo đã ẩn) — dùng được cho OneDrive, YouTube mô tả, hoặc NotebookLM.");
+  toast("Đã lưu file văn bản sạch về máy.");
 }
 </script>
 
@@ -1768,6 +1798,12 @@ dz.addEventListener("drop", function(e){ handleFiles(e.dataTransfer.files); });
 $("btnLib").addEventListener("click", function(){
   $("libPanel").scrollIntoView({ behavior: "smooth", block: "start" });
 });
+$("btnDriveTop").addEventListener("click", function(){
+  var p = $("drivePanel");
+  p.scrollIntoView({ behavior: "smooth", block: "start" });
+  p.classList.remove("flash"); void p.offsetWidth; p.classList.add("flash");
+});
+$("btnQuickDrive").addEventListener("click", function(){ $("btnDriveSyncNow").click(); });
 $("btnPaste").addEventListener("click", function(){
   var txt = $("pasteText").value.trim(); if (!txt){ toast("Hãy dán nội dung sách trước."); return; }
   var title = $("pasteTitle").value.trim() || "Sách dán từ văn bản";
@@ -1785,7 +1821,7 @@ $("btnSample").addEventListener("click", function(){
     "Chỉ cần 20 phút mỗi ngày, sau một tháng bạn đã nghe xong một cuốn sách vừa. Não bộ ghi nhớ tốt hơn khi bạn vừa nghe vừa nhìn theo câu chữ đang được tô sáng.",
     "Từ c0ng việc đến học tập, thói quen nhỏ lặp lại hằng ngày tạo nên khác biệt lớn theo thời gian."
   ].join("\n");
-  addBook({ title: "Văn bản mẫu để thử (có sẵn 1 đoạn quảng cáo + 1 lỗi OCR để bạn thử lọc)", type: "text", chapters: splitChaptersFromText(sample, "Văn bản mẫu") });
+  addBook({ title: "Văn bản mẫu để thử", type: "text", chapters: splitChaptersFromText(sample, "Văn bản mẫu") });
 });
 $("btnYt").addEventListener("click", function(){
   var url = $("ytUrl").value.trim(), id = ytIdFromUrl(url);
@@ -1885,7 +1921,7 @@ $("btnDoInstall").addEventListener("click", async function(){
     toast(r.outcome === "accepted" ? "Đã cài — biểu tượng web sẽ xuất hiện ngoài màn hình như một ứng dụng." : "Bạn đã hoãn cài đặt.");
     $("installCard").classList.add("hidden");
   } else {
-    $("installText").textContent = "Ngay trong khung ứng dụng này, trình duyệt không cho cài một chạm. Hãy mở trang này bằng Chrome (Android) hoặc Safari (iPhone) rồi chọn “Cài ứng dụng / Thêm vào Màn hình chính” — biểu tượng sẽ nằm ngoài màn hình và mở ra cửa sổ riêng như ứng dụng thật.";
+    $("installText").textContent = "Hãy mở trang bằng Chrome hoặc Safari rồi chọn “Thêm vào Màn hình chính”.";
   }
 });
 
@@ -1913,14 +1949,21 @@ var D = {
 };
 function driveSafeName(s){ var n = String(s || "Sach").replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/\s+/g, "-"); return n || "Sach"; }
 function driveHash(str){ var h = 5381; for (var i = 0; i < str.length; i++){ h = ((h << 5) + h + str.charCodeAt(i)) | 0; } return "h" + (h >>> 0).toString(36) + ":" + str.length; }
-function driveSetStatus(html){ $("driveStatus").innerHTML = html; }
+function driveSetStatus(html){
+  $("driveStatus").innerHTML = html;
+  var bt = $("btnDriveTop");
+  if (bt){
+    bt.textContent = D.token ? ("☁ Drive · Đã nối" + (D.account && D.account.email ? " · " + D.account.email : "")) : "☁ Drive · Chưa nối";
+    bt.classList.toggle("on", !!D.token);
+  }
+}
 function drivePinnedOk(){ return !!(D.account && D.pinned && D.pinned === D.account.email); }
 function driveRefreshPinNote(){
   var note = $("drivePinNote"); if (!note) return;
   if (!D.account){ note.textContent = ""; return; }
-  if (!D.pinned) note.textContent = "Chưa chốt tài khoản đồng bộ. Bấm nút trên để chốt đúng tài khoản này — web chỉ đẩy file lên tài khoản đã chốt.";
-  else if (D.pinned !== D.account.email) note.innerHTML = "⚠ Tài khoản đang đăng nhập khác tài khoản đã chốt (<b>" + esc(D.pinned) + "</b>) — đồng bộ đang TẠM DỪNG để không đẩy nhầm tài khoản. Bấm “Dùng tài khoản hiện tại để đồng bộ” nếu bạn muốn chuyển sang tài khoản này.";
-  else note.textContent = "Đã chốt: mọi lần đồng bộ đều lên tài khoản này, vào thư mục đã chọn bên dưới.";
+  if (!D.pinned) note.textContent = "Chưa chốt tài khoản. Bấm nút trên để chốt.";
+  else if (D.pinned !== D.account.email) note.innerHTML = "⚠ Khác tài khoản đã chốt (<b>" + esc(D.pinned) + "</b>) — đồng bộ đang tạm dừng. Bấm nút trên để chuyển sang tài khoản này.";
+  else note.textContent = "Đã chốt tài khoản này.";
   $("btnDrivePin").textContent = (D.pinned && D.pinned !== D.account.email) ? "Chuyển sang dùng tài khoản hiện tại" : "Dùng tài khoản hiện tại để đồng bộ";
 }
 async function driveApi(path, opts){
@@ -1937,7 +1980,7 @@ async function driveApiJson(path, opts){
 }
 function driveConnect(switchAccount){
   var cid = $("driveClientId").value.trim();
-  if (!cid){ toast("Hãy dán Mã ứng dụng Google (Client ID) vào ô trong mục Drive trước — phần hướng dẫn ngay dưới ô đó chỉ cách lấy miễn phí."); $("driveClientId").focus(); return; }
+  if (!cid){ toast("Hãy dán Client ID vào mục Drive trước (hướng dẫn ngay dưới ô nhập)."); $("driveClientId").focus(); return; }
   if (typeof google === "undefined" || !google.accounts || !google.accounts.oauth2){
     toast("Thư viện đăng nhập Google chưa tải được (kiểm tra mạng) — tải lại trang rồi thử lại."); return;
   }
@@ -2108,7 +2151,7 @@ function driveRenderSynced(){
   }).join("");
 }
 function driveRenderLast(extra){
-  $("driveLast").textContent = "Tự đồng bộ: " + (D.auto ? "Bật — có thay đổi là đẩy lên ngay" : "Tắt") + " · Lượt quét 5 phút gần nhất: " + (D.lastSweep || "chưa có") + (extra || "");
+  $("driveLast").textContent = "Tự đồng bộ: " + (D.auto ? "Bật" : "Tắt") + " · Quét 5 phút: " + (D.lastSweep || "chưa có") + (extra || "");
 }
 /* 5-minute sweep: re-mark everything; unchanged payloads are skipped by content hash */
 setInterval(function(){
@@ -2137,7 +2180,7 @@ function driveRenderCrumb(){
 }
 async function driveBrowseRender(query){
   var host = $("driveBrowseList");
-  if (!D.token){ host.innerHTML = '<p class="muted small">Kết nối Drive để duyệt thư mục, mở và chọn bất kỳ file nào đưa vào thư viện.</p>'; return; }
+  if (!D.token){ host.innerHTML = '<p class="muted small">Kết nối Drive để chọn file.</p>'; return; }
   driveRenderCrumb();
   host.innerHTML = '<p class="muted small">Đang liệt kê…</p>';
   try {
@@ -2197,7 +2240,7 @@ $("btnDrivePin").addEventListener("click", function(){
   if (!D.account) return;
   D.pinned = D.account.email;
   driveRefreshPinNote();
-  driveSetStatus("Đã chốt tài khoản <b>" + esc(D.pinned) + "</b> để đồng bộ. Từ giờ có thay đổi là web tự đẩy lên Drive ngay, và quét lại mỗi 5 phút.");
+  driveSetStatus("Đã chốt tài khoản <b>" + esc(D.pinned) + "</b>. Có thay đổi là tự đẩy lên Drive.");
   S.books.forEach(function(b){ D.dirty["book:" + b.id + ":text"] = 1; D.dirty["book:" + b.id + ":report"] = 1; if (b._file) D.dirty["book:" + b.id + ":orig"] = 1; });
   D.dirty["report:all"] = 1;
   driveScheduleSync(400);
@@ -2236,7 +2279,7 @@ $("btnDriveReports").addEventListener("click", function(){
     var blob = new Blob([driveReportText(null)], { type: "text/plain;charset=utf-8" });
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Bao-cao-sua-chu-ghi-chu.txt";
     document.body.appendChild(a); a.click(); a.remove();
-    toast("Chưa kết nối Drive nên web đã tải báo cáo thành file — bạn tự thả file này vào Drive, hoặc kết nối Drive để lần sau báo cáo tự lên.", 7000);
+    toast("Chưa nối Drive — đã tải báo cáo thành file để bạn tự thả vào Drive.", 6000);
     return;
   }
   D.dirty["report:all"] = 1;
