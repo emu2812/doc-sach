@@ -390,11 +390,12 @@ function numWords(numStr){
   if (n === 0) return "không";
   if (n < 0) return "âm " + numWords(String(-n));
   var groups = ["", " nghìn", " triệu", " tỷ", " nghìn tỷ", " triệu tỷ"];
-  var parts = [], g = 0;
-  while (n > 0 && g < groups.length){
-    var chunk = n % 1000;
-    if (chunk > 0) parts.unshift(threeDigits(chunk, g > 0) + groups[g]);
-    n = Math.floor(n / 1000); g++;
+  var chunks = [];
+  while (n > 0 && chunks.length < groups.length){ chunks.push(n % 1000); n = Math.floor(n / 1000); }
+  var parts = [];
+  for (var g = chunks.length - 1; g >= 0; g--){
+    // "không trăm" padding applies to every group EXCEPT the leading one
+    if (chunks[g] > 0) parts.push(threeDigits(chunks[g], g !== chunks.length - 1) + groups[g]);
   }
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
@@ -407,6 +408,20 @@ function romanToInt(r){
   }
   return (total > 0 && total <= 3999) ? total : null;
 }
+function intToRoman(n){
+  var table = [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]], out = "";
+  for (var i = 0; i < table.length; i++){ while (n >= table[i][0]){ out += table[i][1]; n -= table[i][0]; } }
+  return out;
+}
+/* Guess the book's language from its own text so an English book is not read with a Vietnamese voice */
+function detectLang(sample){
+  var s = String(sample || "").slice(0, 3000);
+  var viMarks = (s.match(/[ăâđêôơưàáảãạấầẩẫậắằẳẵặắằẳẵặèéẻẽẹếềểễệìíỉĩịòóỏõọốồổỗộớờởỡợùúủũụứừửữựỳýỷỹỵ]/gi) || []).length;
+  if (viMarks >= 3) return "vi";
+  var enWords = (s.toLowerCase().match(/\b(the|and|of|to|in|is|are|was|were|with|for|that|this|from|have|has|not|they|you|will|would|can|could)\b/g) || []).length;
+  if (enWords >= 5) return "en";
+  return null;
+}
 
 /* ================= SPEECH NORMALIZATION ================= */
 function normalizeForSpeech(text, lang){
@@ -418,15 +433,23 @@ function normalizeForSpeech(text, lang){
     t = t.replace(re, function(m, p1){ return p1 + S.pron[k] + " "; });
   });
   if (lang && lang.indexOf("vi") !== 0) return t.trim(); // number-word rules below are Vietnamese
-  // dates dd/mm/yyyy and dd-mm-yyyy
+  // dates dd/mm/yyyy and dd-mm-yyyy — the year is consumed here so it is not re-read as a plain number
   t = t.replace(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\b/g, function(m, d, mo, y){
-    return "ngày " + numWords(d) + " tháng " + numWords(mo) + " năm " + numWords(y);
+    return "ngày " + numWords(d) + " tháng " + numWords(mo) + " năm @YR" + y + "@";
   });
   // time hh:mm / hh giờ mm
   t = t.replace(/\b(\d{1,2}):(\d{2})\b/g, function(m, h, mi){ return numWords(h) + " giờ " + (mi === "00" ? "" : numWords(mi) + " phút"); });
   t = t.replace(/\b(\d{1,2})h(\d{2})\b/g, function(m, h, mi){ return numWords(h) + " giờ " + numWords(mi) + " phút"; });
-  // roman numerals (standalone, at least 2 chars or I/V/X alone after space+capital context)
-  t = t.replace(/\b([IVXLCDM]{2,})\b/g, function(m){ var v = romanToInt(m); return v ? numWords(String(v)) : m; });
+  // phone numbers: read digit by digit (0901 234 567 -> không chín không một…)
+  t = t.replace(/\b0\d(?:[ .]?\d){6,}\b/g, function(m){
+    return m.replace(/\D/g, "").split("").map(function(c){ return DIG[+c]; }).join(" ");
+  });
+  // ranges: 5-10 / 6,5–7,5 -> "… đến …" instead of two bare numbers run together
+  t = t.replace(/(\d[\d.,]*\d|\d)\s*[-–—]\s*(\d[\d.,]*\d|\d)/g, function(m, a, b){
+    return speakNumToken(a) + " đến " + speakNumToken(b);
+  });
+  // roman numerals — only canonical forms, so English words like DID / MILD / CIVIL are NOT read as numbers
+  t = t.replace(/\b([IVXLCDM]{2,})\b/g, function(m){ var v = romanToInt(m); return (v && intToRoman(v) === m) ? numWords(String(v)) : m; });
   // units
   t = t.replace(/(\d[\d.,]*)\s*m²/g, "$1 mét vuông").replace(/(\d[\d.,]*)\s*m2\b/g, "$1 mét vuông");
   t = t.replace(/(\d[\d.,]*)\s*km\/h/g, "$1 ki lô mét trên giờ");
@@ -435,19 +458,39 @@ function normalizeForSpeech(text, lang){
   t = t.replace(/(\d[\d.,]*)\s*(kg|km|cm|mm|ml)\b/g, function(m, n, u){
     var name = {kg:"ki lô gam", km:"ki lô mét", cm:"xăng ti mét", mm:"mi li mét", ml:"mi li lít"}[u]; return n + " " + name;
   });
-  // money: number + đ / đồng / VNĐ
-  t = t.replace(/(\d{1,3}(?:\.\d{3})+|\d+)\s*(đ|đồng|VNĐ|vnđ)/g, function(m, n){ return numStrWords(n) + " đồng"; });
+  // money: number + đ / đồng / VNĐ (the currency word itself is dropped so it is not read twice)
+  t = t.replace(/(\d{1,3}(?:\.\d{3})+|\d+)\s*(đồng|VNĐ|vnđ|đ)/g, function(m, n){ return numStrWords(n) + " @CUR@"; });
+  // thousands separated by commas (English style inside Vietnamese books): 1,250 -> một nghìn hai trăm năm mươi
+  t = t.replace(/\b\d{1,3}(?:,\d{3})+\b/g, function(m){ return numStrWords(m); });
   // decimals with comma: 6,5 -> sáu phẩy năm
   t = t.replace(/\b(\d+),(\d+)\b/g, function(m, a, b){ return numWords(a) + " phẩy " + b.split("").map(function(c){ return DIG[+c]; }).join(" "); });
+  // decimals with a dot (3.14, phiên bản 2.5): read "phẩy" instead of two separate numbers
+  t = t.replace(/\b(\d+)\.(\d{1,2})\b/g, function(m, a, b){ return numStrWords(a) + " phẩy " + (b.length === 2 ? numWords(b) : DIG[+b]); });
   // thousands-separated or plain integers
   t = t.replace(/\b\d{1,3}(?:\.\d{3})+\b|\b\d{4,}\b/g, function(m){ return numStrWords(m); });
   t = t.replace(/\b\d{1,3}\b/g, function(m){ return numWords(m); });
+  // years and currency words are restored last, after every digit has been converted
+  t = t.replace(/@YR(\d{4})@/g, function(m, y){ return numWords(y); });
+  t = t.replace(/@CUR@/g, "đồng");
   return t.replace(/\s+/g, " ").trim();
 }
 function numStrWords(s){
-  var clean = String(s).replace(/\./g, "");
-  if (clean.length > 12) return s.split("").map(function(c){ return /\d/.test(c) ? DIG[+c] : c; }).join(" ");
+  var raw = String(s), clean = raw.replace(/[.,]/g, "");
+  function digitRead(str){ return str.split("").map(function(c){ return /\d/.test(c) ? DIG[+c] : c; }).join(" "); }
+  // phone-like / code-like digit strings are read digit by digit, not as one huge number
+  if (/^\d+$/.test(clean) && clean.charAt(0) === "0" && clean.length >= 7) return digitRead(clean);
+  if (/^\d+$/.test(raw) && clean.length >= 10) return digitRead(clean);
+  if (clean.length > 12) return digitRead(raw);
+  // a lone number token: read it standalone via numWords (leading group gets no "không trăm" lead-in)
   return numWords(clean);
+}
+/* Read one numeric token that may still carry separators/decimals: 1.250 -> nghìn, 6,5 / 3.14 -> "phẩy" */
+function speakNumToken(tok){
+  tok = String(tok);
+  if (/^\d{1,3}(\.\d{3})+$/.test(tok)) return numStrWords(tok);
+  var dm = tok.match(/^(\d+)[.,](\d{1,2})$/);
+  if (dm) return numStrWords(dm[1]) + " phẩy " + (dm[2].length === 2 ? numWords(dm[2]) : DIG[+dm[2]]);
+  return numStrWords(tok);
 }
 
 /* ================= TEXT -> CHAPTERS / SENTENCES ================= */
@@ -482,8 +525,25 @@ function splitChaptersFromText(raw, fallbackTitle){
   return chapters.filter(function(c){ return c.paras.length || chapters.length === 1; });
 }
 function splitSentences(para){
-  var parts = para.match(/[^.!?…]+[.!?…]+["”’)]*\s*|[^.!?…]+$/g);
-  return (parts || [para]).map(function(s){ return s.trim(); }).filter(Boolean);
+  var ABBR = { tp:1, ths:1, ts:1, pgs:1, gs:1, bs:1, ks:1, mr:1, mrs:1, ms:1, dr:1, st:1, vs:1, no:1 };
+  var raw = para.match(/[^.!?…]+[.!?…]+["”’)]*\s*|[^.!?…]+$/g) || [para];
+  var out = [];
+  raw.forEach(function(piece){
+    var t = piece.trim(); if (!t) return;
+    if (out.length){
+      var prev = out[out.length - 1];
+      var core = prev.replace(/["”’)]+\s*$/, "").replace(/\s+$/, "");
+      var lw = core.split(/\s+/).pop().replace(/[.!?…]+$/, "").toLowerCase();
+      // do not split after abbreviations (TP. Hồ Chí Minh), initials, or inside decimals (3.14)
+      if (/[.!?…]$/.test(core) && (ABBR[lw] || /^[a-zà-ỹ]$/i.test(lw) || /^\d+$/.test(lw))){
+        var joiner = (/^\d/.test(t) && /\d\.$/.test(core)) ? "" : " ";
+        out[out.length - 1] = prev + joiner + t;
+        return;
+      }
+    }
+    out.push(t);
+  });
+  return out.length ? out : [para];
 }
 function bookWords(book){
   return book.chapters.reduce(function(a, ch){ return a + ch.paras.join(" ").split(/\s+/).filter(Boolean).length; }, 0);
@@ -567,7 +627,10 @@ function applyReplaceEverywhere(book, from, to){
 function addBook(book){
   book.id = book.id || uid();
   book.folder = book.folder || "Chưa phân loại";
-  book.lang = book.lang || ($("ocrLang").value.indexOf("eng") === 0 ? "en" : "vi");
+  if (!book.lang){
+    var sampleTxt = book.type === "text" ? book.chapters.map(function(c){ return c.paras.join(" "); }).join(" ") : "";
+    book.lang = detectLang(sampleTxt) || ($("ocrLang").value.indexOf("eng") === 0 ? "en" : "vi");
+  }
   S.books.push(book);
   if (book.type === "text"){
     S.ads[book.id] = scanAds(book);
@@ -592,9 +655,22 @@ async function importPDF(file){
   for (var i = 1; i <= pdf.numPages; i++){
     var page = await pdf.getPage(i);
     var tc = await page.getTextContent();
-    var text = tc.items.map(function(it){ return it.str; }).join(" ").replace(/\s+/g, " ").trim();
+    // keep line structure (hasEOL): rebuild paragraphs and undo line-break hyphenation so words are read whole
+    var rawLines = [""];
+    tc.items.forEach(function(it){
+      rawLines[rawLines.length - 1] += it.str + " ";
+      if (it.hasEOL) rawLines.push("");
+    });
+    var pageParas = [], buf = "";
+    rawLines.map(function(l){ return l.replace(/\s+/g, " ").trim(); }).filter(Boolean).forEach(function(l){
+      if (buf && /-$/.test(buf) && /^[a-zà-ỹ]/.test(l)) buf = buf.slice(0, -1) + l;
+      else if (buf && !/[.!?…:;”"]$/.test(buf)) buf += " " + l;
+      else { if (buf) pageParas.push(buf); buf = l; }
+    });
+    if (buf) pageParas.push(buf);
+    var text = pageParas.join(" ");
     if (text.length < 30) needOcrPages.push(i);
-    chapters.push({ title: "Trang " + i, paras: text ? [text] : [], page: i - 1 });
+    chapters.push({ title: "Trang " + i, paras: pageParas, page: i - 1 });
   }
   var book = { title: file.name.replace(/\.pdf$/i, ""), type: "text", chapters: chapters, pdfPages: pdf.numPages, needOcr: needOcrPages };
   // store page images for OCR review + run OCR for textless pages on demand
@@ -921,32 +997,118 @@ function refreshVoices(){
     var o = document.createElement("option"); o.value = i;
     o.textContent = v.name + " (" + v.lang + ")"; sel.appendChild(o);
   });
-  // preselect a matching voice for display only
-  var match = S.voices.findIndex(function(v){ return v.lang && v.lang.toLowerCase().indexOf(want) === 0; });
-  if (match >= 0 && !sel.value) sel.value = String(match);
+  // preselect the best-quality matching voice in the list (display only; auto mode uses the same scoring)
+  if (sel.getAttribute("data-manual") !== "1"){
+    var best = -1, bs = -1;
+    S.voices.forEach(function(v, i){ var sc = voiceScore(v, want); if (sc > bs){ bs = sc; best = i; } });
+    if (best >= 0) sel.value = String(best);
+  }
 }
 if (synth) synth.onvoiceschanged = refreshVoices;
+/* Score voices so the default is the most natural one available (Google / Natural / Neural / Premium first, compact last) */
+function voiceScore(v, want){
+  if (!v || !v.lang) return -1;
+  var vl = v.lang.toLowerCase().replace(/_/g, "-"), w = String(want || "vi").toLowerCase();
+  var s = -1;
+  if (vl === w) s = 30;
+  else if (vl.indexOf(w) === 0) s = 20;
+  else if (vl.indexOf(w.split("-")[0]) === 0) s = 10;
+  if (s < 0) return -1;
+  var n = (v.name || "").toLowerCase();
+  if (n.indexOf("google") >= 0) s += 6;
+  if (/(natural|neural|premium|enhanced|online)/.test(n)) s += 5;
+  if (/(compact|eloquence)/.test(n)) s -= 4;
+  if (v.default) s += 1;
+  return s;
+}
 function pickVoice(lang){
-  var selVal = $("setVoice").value;
-  var b = curBook();
-  var manual = S.voices[parseInt(selVal, 10)];
-  // if the user explicitly picked a voice whose lang matches book lang, honour it
-  if (manual && b && manual.lang && manual.lang.toLowerCase().indexOf((b.lang || "vi")) === 0) return manual;
+  var sel = $("setVoice"), b = curBook();
+  if (sel.getAttribute("data-manual") === "1"){
+    var mv = S.voices[parseInt(sel.value, 10)];
+    if (mv) return mv;
+  }
   var want = (b && b.lang) || lang || "vi";
-  return S.voices.find(function(v){ return v.lang && v.lang.toLowerCase().indexOf(want) === 0; }) ||
-         S.voices.find(function(v){ return v.lang && v.lang.toLowerCase().indexOf(want.split("-")[0]) === 0; }) || manual || null;
+  var best = null, bs = -1;
+  S.voices.forEach(function(v){ var sc = voiceScore(v, want); if (sc > bs){ bs = sc; best = v; } });
+  return best;
+}
+/* Speech is fed to the engine in multi-sentence chunks (one utterance per chunk) so the voice keeps
+   natural intonation across sentences instead of restarting flat at every sentence. A generation
+   counter invalidates events from cancelled utterances, which previously advanced the sentence
+   counter a second time and made playback skip sentences. */
+var speakGen = 0;
+function sentenceSegments(sent, lang){
+  var t = normalizeForSpeech(sent.text, lang);
+  if (!t) return [];
+  if (t.length <= 240) return [t];
+  var segs = [], rest = t;
+  while (rest.length > 240){
+    var cut = Math.max(rest.lastIndexOf("; ", 240), rest.lastIndexOf(", ", 240));
+    if (cut < 60) cut = rest.lastIndexOf(" ", 240);
+    if (cut < 40) break;
+    segs.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) segs.push(rest);
+  return segs;
+}
+function buildChunk(fromIdx){
+  var b = curBook(); if (!b) return null;
+  var parts = [], text = "", firstPi = null;
+  for (var i = fromIdx; i < S.sents.length; i++){
+    var s = S.sents[i];
+    if (firstPi === null) firstPi = s.pi;
+    if (s.pi !== firstPi && text.length > 40) break; // natural pause at paragraph end
+    var segs = sentenceSegments(s, b.lang || "vi");
+    for (var k = 0; k < segs.length; k++){
+      var t = segs[k];
+      if (text && text.length + t.length > 230 && parts[parts.length - 1].idx !== i) return { parts: parts, text: text, lastIdx: parts[parts.length - 1].idx };
+      parts.push({ idx: i, start: text ? text.length + 1 : 0, end: 0 });
+      text = text ? text + " " + t : t;
+      parts[parts.length - 1].end = text.length;
+    }
+    if (text.length >= 200 && segs.length) break;
+  }
+  return parts.length ? { parts: parts, text: text, lastIdx: parts[parts.length - 1].idx } : null;
 }
 function speakCurrent(){
   var b = curBook(); if (!b || !synth) return;
   if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
-  var s = S.sents[S.sentIdx];
-  var u = new SpeechSynthesisUtterance(normalizeForSpeech(s.text, b.lang || "vi"));
+  var chunk = buildChunk(S.sentIdx);
+  if (!chunk){ S.sentIdx++; speakCurrent(); return; }
+  var gen = ++speakGen;
+  var u = new SpeechSynthesisUtterance(chunk.text);
   u.rate = S.rate;
   var v = pickVoice(b.lang); if (v){ u.voice = v; u.lang = v.lang; } else u.lang = (b.lang === "vi" ? "vi-VN" : b.lang);
-  u.onend = function(){ if (S.playing){ S.sentIdx++; if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); } else { highlightSent(); speakCurrent(); } } };
-  u.onerror = function(){ if (S.playing){ S.sentIdx++; highlightSent(); speakCurrent(); } };
-  synth.cancel(); synth.speak(u);
+  u.onboundary = function(e){
+    if (gen !== speakGen || !S.playing || e.charIndex == null) return;
+    for (var i = 0; i < chunk.parts.length; i++){
+      var p = chunk.parts[i];
+      if (e.charIndex >= p.start && e.charIndex < p.end){
+        if (S.sentIdx !== p.idx){ S.sentIdx = p.idx; highlightSent(); }
+        break;
+      }
+    }
+  };
+  u.onend = function(){
+    if (gen !== speakGen || !S.playing) return;
+    S.sentIdx = chunk.lastIdx + 1;
+    if (S.sentIdx >= S.sents.length) nextChapterOrStop();
+    else { highlightSent(); speakCurrent(); }
+  };
+  u.onerror = function(e){
+    if (gen !== speakGen || !S.playing) return;
+    if (e.error === "canceled" || e.error === "interrupted") return;
+    S.sentIdx = chunk.lastIdx + 1; highlightSent(); speakCurrent();
+  };
+  synth.speak(u);
   highlightSent();
+}
+function restartSpeech(){
+  if (!synth) return;
+  speakGen++;
+  synth.cancel();
+  speakCurrent();
 }
 function nextChapterOrStop(){
   var b = curBook();
@@ -961,7 +1123,7 @@ function playFrom(i){
   if (S.mode === "tts"){
     if (!synth){ toast("Trình duyệt này không có giọng đọc (speechSynthesis). Hãy thử Chrome/Edge/Safari mới."); return; }
     S.sentIdx = Math.max(0, Math.min(i || 0, S.sents.length - 1));
-    S.playing = true; updatePlayBtn(); speakCurrent(); setupMediaSession(b);
+    S.playing = true; updatePlayBtn(); restartSpeech(); setupMediaSession(b);
   } else if (S.mode === "audio"){
     if (S.audioEl){ S.audioEl.playbackRate = S.rate; S.audioEl.play(); }
   } else if (S.mode === "yt"){
@@ -969,6 +1131,7 @@ function playFrom(i){
   }
 }
 function pauseAll(){
+  speakGen++; // invalidate pending utterance events before cancelling
   S.playing = false; updatePlayBtn();
   if (synth) synth.cancel();
   if (S.audioEl) S.audioEl.pause();
@@ -982,7 +1145,7 @@ function skipSentences(delta){
   if (S.mode === "tts"){
     var was = S.playing;
     S.sentIdx = Math.max(0, Math.min(S.sents.length - 1, S.sentIdx + (delta > 0 ? step : -step)));
-    highlightSent(); if (was) speakCurrent();
+    highlightSent(); if (was) restartSpeech();
   } else if (S.mode === "audio" && S.audioEl){
     S.audioEl.currentTime = Math.max(0, S.audioEl.currentTime + delta);
   } else if (S.mode === "yt" && S.ytPlayer && S.ytPlayer.getCurrentTime){
@@ -1167,9 +1330,11 @@ function renderPron(){
 }
 function testSpeak(text){
   if (!synth){ toast("Trình duyệt không có giọng đọc."); return; }
-  var b = curBook();
+  if (S.playing) pauseAll();
   var u = new SpeechSynthesisUtterance(normalizeForSpeech(text, "vi"));
-  u.rate = S.rate; var v = S.voices.find(function(x){ return x.lang && x.lang.toLowerCase().indexOf("vi") === 0; });
+  u.rate = S.rate;
+  var v = null, bs = -1;
+  S.voices.forEach(function(x){ var sc = voiceScore(x, "vi"); if (sc > bs){ bs = sc; v = x; } });
   if (v){ u.voice = v; u.lang = v.lang; } else u.lang = "vi-VN";
   synth.cancel(); synth.speak(u);
 }
@@ -1374,12 +1539,15 @@ $("setRate").addEventListener("change", function(){
   S.rate = parseFloat(this.value);
   if (S.mode === "audio" && S.audioEl) S.audioEl.playbackRate = S.rate;
   if (S.mode === "yt" && S.ytPlayer && S.ytPlayer.setPlaybackRate) S.ytPlayer.setPlaybackRate(S.rate);
-  if (S.mode === "tts" && S.playing) speakCurrent();
+  if (S.mode === "tts" && S.playing) restartSpeech();
   var b = curBook();
   if (b && b.type === "text") $("bookMeta").textContent = b.chapters.length + " chương · " + bookWords(b).toLocaleString("vi-VN") + " từ · nghe hết ~" + estMinutes(bookWords(b), S.rate) + " phút ở tốc độ hiện tại";
   renderChapList();
 });
-$("setVoice").addEventListener("change", function(){ if (S.mode === "tts" && S.playing) speakCurrent(); });
+$("setVoice").addEventListener("change", function(){
+  if (this.value === "") this.removeAttribute("data-manual"); else this.setAttribute("data-manual", "1");
+  if (S.mode === "tts" && S.playing) restartSpeech();
+});
 $("setSleep").addEventListener("change", applySleep);
 $("btnAmb").addEventListener("click", toggleAmbient);
 $("ambVol").addEventListener("input", function(){ if (S.ambGain && S.ambOn) S.ambGain.gain.value = this.value / 100 * 0.4; });
@@ -1443,8 +1611,10 @@ $("btnDoInstall").addEventListener("click", async function(){
   }
 });
 
-/* keep TTS alive on some browsers that pause long utterances */
-setInterval(function(){ if (synth && S.playing && S.mode === "tts" && !synth.speaking){ /* safety net */ } }, 5000);
+/* Chrome can silently pause long TTS sessions (especially in a background tab) — nudge it awake */
+setInterval(function(){
+  if (synth && S.playing && S.mode === "tts" && synth.paused){ try { synth.resume(); } catch (e) {} }
+}, 10000);
 
 renderLibrary(); renderReader(); renderPron(); renderLog(); renderNotes();
 if (synth) refreshVoices();
