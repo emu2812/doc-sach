@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <!-- No Referer on any load from this page: Google answers 404 to every translate_tts
+         request that carries a Referer header, which would silently kill the Google reading
+         voice (see the note at the Google voice engine below). The YouTube player is NOT
+         affected: its API-generated iframe carries its own referrerpolicy attribute, which
+         overrides this document policy (verified in a real browser). -->
+    <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#b45309" />
     <link rel="icon" href="data:," />
     <link rel="manifest" href="data:application/octet-stream;base64,eyJiYWNrZ3JvdW5kX2NvbG9yIjoiI2Y0ZWZlNiIsImRlc2NyaXB0aW9uIjoixJDhu41jIHPDoWNoIHRow6BuaCB0aeG6v25nLCBs4buNYyBxdeG6o25nIGPDoW8sIHNvw6F0IGzhu5dpIE9DUiwgZOG7i2NoIHPDoWNoIGdp4buvIG5ndXnDqm4gY+G6pXUgdHLDumMsIGfhuq9uIGxpbmsgWW91VHViZSBuaMawIG3hu5l0IGN14buRbiBzw6FjaC4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImxhbmciOiJ2aSIsIm5hbWUiOiLEkOG7jWMgU8OhY2ggQuG6sW5nIEdp4buNbmcgTsOzaSDigJQgQuG6o24gQ8O0bmcgS2hhaSIsInNjb3BlIjoiLi4vIiwic2hvcnRfbmFtZSI6IsSQ4buNYyBTw6FjaCBOw7NpIiwic3RhcnRfdXJsIjoiLi4vIiwidGhlbWVfY29sb3IiOiIjYjQ1MzA5In0=" />
@@ -325,7 +331,7 @@
         <div class="pset"><label class="lbl" style="margin:0">Tốc độ</label>
           <select id="setRate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select></div>
         <div class="pset"><label class="lbl" style="margin:0">Giọng đọc</label>
-          <div style="padding:2px 0;font-weight:600">Google Dịch</div></div>
+          <div style="padding:2px 0;font-weight:600" id="voiceName">Google Dịch</div></div>
         <div class="pset"><label class="lbl" style="margin:0">Hẹn giờ tắt</label>
           <select id="setSleep"><option value="0">Không hẹn</option><option value="5">5 phút</option><option value="10">10 phút</option><option value="15">15 phút</option><option value="30">30 phút</option><option value="60">60 phút</option><option value="-1">Hết chương</option></select></div>
         <div class="pset"><label class="lbl" style="margin:0">Âm nền</label>
@@ -1019,11 +1025,27 @@ function pickVoice(lang){
 /* ================= THE ONE VOICE: GOOGLE TRANSLATE =================
    Playback uses the Google Translate speech endpoint — the same voice as the "listen" button in
    Google Translate — so the reading sounds exactly like Google Dịch, with ONE fixed voice and no
-   voice list anywhere. The endpoint accepts ~200 characters per request, so each sentence is cut
-   into clause-sized pieces (<=180 chars) played back-to-back on a single <audio> element; the next
-   piece is prefetched while the current one plays so the reading stays continuous. Only if the
-   Google voice cannot be loaded at all (network blocked) does playback fall back ONCE to the single
-   best device voice — still no picker — and a toast says so. */
+   voice list anywhere. Two things make it sound like a person reading a story aloud instead of a
+   machine spelling out fragments:
+   1) NO REFERRER. Google answers 404 to every translate_tts request that carries a Referer
+      header — and a browser normally sends one for an <audio> load. (Verified both with raw
+      requests and in a real Chromium: same URL returns 200 audio/mpeg and plays when no
+      Referer is sent, 404 text/html when any Referer is sent.) The suppression therefore
+      lives in the document itself — <meta name="referrer" content="no-referrer"> in <head> —
+      because Chromium does NOT honour referrerPolicy on media elements (also verified: an
+      echo server still received the Referer from such an element); the per-element attribute
+      is still set in gtAudio/ensureTtsAudio for browsers that do honour it. Without this the
+      Google voice NEVER loads in a real browser and playback silently drops to the device
+      voice — which, on a phone with no proper Vietnamese voice installed, spells Vietnamese
+      out letter by letter.
+   2) WHOLE-SENTENCE CHUNKS WITHIN ONE PARAGRAPH. The endpoint accepts ~200 characters per
+      request, so sentences are packed whole into chunks of up to 190 normalized characters
+      that never cross a paragraph boundary; Google then reads each chunk with sentence-level
+      intonation — like a narrator who sees the whole sentence — instead of restarting flat at
+      every fragment. The next chunk is prefetched while the current one plays, the highlight
+      follows the voice inside a chunk, and a short beat of silence separates paragraphs.
+   Only if the Google voice cannot be loaded at all (network blocked) does playback fall back
+   ONCE to the single best device voice — still no picker — and the player label says so. */
 function gtLang(lang){
   var l = String(lang || "vi").toLowerCase();
   if (l.indexOf("zh") === 0) return "zh-CN";
@@ -1034,73 +1056,141 @@ function gtUrl(text, lang){
   return "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" +
     encodeURIComponent(gtLang(lang)) + "&q=" + encodeURIComponent(text);
 }
-function googleSegments(sent, lang){
-  var t = normalizeForSpeech(sent.text, lang);
-  if (!t) return [];
-  var segs = [], rest = t;
-  while (rest.length > 180){
-    var cut = Math.max(rest.lastIndexOf("; ", 180), rest.lastIndexOf(", ", 180), rest.lastIndexOf(": ", 180));
-    if (cut < 60) cut = rest.lastIndexOf(" ", 180);
-    if (cut < 40) cut = 180;
-    segs.push(rest.slice(0, cut + 1).trim());
+/* Every Google-voice audio element is born here: no Referer, or Google returns 404 HTML
+   instead of MP3 (see the note above) and the listener hears the device fallback voice. */
+function gtAudio(url){
+  var a = new Audio();
+  a.preload = "auto";
+  try { a.referrerPolicy = "no-referrer"; } catch (e) {}
+  try { a.setAttribute("referrerpolicy", "no-referrer"); } catch (e) {}
+  a.src = url;
+  return a;
+}
+var GT_MAX = 190; // endpoint limit is ~200 characters per request; keep a safety margin
+/* Split ONE normalized sentence only when it alone exceeds the endpoint limit, and then only
+   at clause boundaries — never mid-word, never into letter-sized fragments. */
+function sentPieces(text){
+  if (!text) return [];
+  if (text.length <= GT_MAX) return [text];
+  var out = [], rest = text;
+  while (rest.length > GT_MAX){
+    var cut = Math.max(rest.lastIndexOf("; ", GT_MAX), rest.lastIndexOf(", ", GT_MAX),
+      rest.lastIndexOf(": ", GT_MAX), rest.lastIndexOf(" — ", GT_MAX));
+    if (cut < 60) cut = rest.lastIndexOf(" ", GT_MAX);
+    if (cut < 40) cut = GT_MAX;
+    out.push(rest.slice(0, cut + 1).trim());
     rest = rest.slice(cut + 1).trim();
   }
-  if (rest) segs.push(rest);
-  return segs.filter(Boolean);
+  if (rest) out.push(rest);
+  return out.filter(Boolean);
+}
+/* Build one playback chunk starting at sentence startIdx (piece startPiece of that sentence):
+   whole sentences packed up to GT_MAX normalized characters, never crossing a paragraph
+   boundary, so the voice keeps a narrator's flow and breathes between paragraphs. spans map
+   character ranges of the chunk text back to sentence indices so the highlight can follow the
+   voice inside the chunk. nextIdx/nextPiece say where the following chunk starts (a single
+   over-long sentence continues across chunks at a clause boundary). Null = nothing speakable
+   remains in this chapter. */
+function buildItem(startIdx, startPiece){
+  var b = curBook(); if (!b) return null;
+  var lang = b.lang || "vi";
+  var text = "", spans = [], para = null, last = startIdx - 1;
+  var nextIdx = S.sents.length, nextPiece = 0, full = false;
+  for (var i = startIdx; i < S.sents.length && !full; i++){
+    var s = S.sents[i];
+    if (para === null) para = s.pi;
+    if (s.pi !== para && text) break;
+    var pieces = sentPieces(normalizeForSpeech(s.text, lang));
+    var k0 = (i === startIdx && startPiece) ? startPiece : 0;
+    for (var k = k0; k < pieces.length; k++){
+      var p = pieces[k];
+      if (text && text.length + 1 + p.length > GT_MAX){ nextIdx = i; nextPiece = k; full = true; break; }
+      var st = text ? text.length + 1 : 0;
+      text = text ? text + " " + p : p;
+      spans.push({ idx: i, start: st, end: text.length });
+      last = i;
+    }
+  }
+  if (!text) return null;
+  if (!full){ nextIdx = last + 1; nextPiece = 0; }
+  return { text: text, first: spans[0].idx, last: last, spans: spans,
+    nextIdx: nextIdx, nextPiece: nextPiece,
+    paraAfter: (!nextPiece && nextIdx < S.sents.length && S.sents[nextIdx].pi !== para) };
 }
 var ttsAudio = null;
-var G = { gen: 0, segs: [], si: 0, sentIdx: -1, hasAudio: false, pre: null };
+var G = { gen: 0, cur: null, piece: 0, hasAudio: false, pre: null, pauseTimer: null };
 function ensureTtsAudio(){
   if (!ttsAudio){
     ttsAudio = new Audio();
     ttsAudio.preload = "auto";
+    // no Referer on the playback element either, or Google serves 404 instead of the voice
+    try { ttsAudio.referrerPolicy = "no-referrer"; } catch (e) {}
+    try { ttsAudio.setAttribute("referrerpolicy", "no-referrer"); } catch (e) {}
     ttsAudio.addEventListener("ended", function(){
       if (!S.playing || !G.hasAudio || S.ttsEngine !== "google") return;
-      G.si++;
-      if (G.si < G.segs.length){ playGoogleSeg(); return; }
+      var item = G.cur; if (!item) return;
       G.hasAudio = false;
-      S.sentIdx = G.sentIdx + 1;
-      if (S.sentIdx >= S.sents.length) nextChapterOrStop();
-      else speakCurrent();
+      S.sentIdx = item.nextIdx; G.piece = item.nextPiece;
+      if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
+      if (item.paraAfter){
+        // a narrator's breath between paragraphs: brief silence, then read on
+        highlightSent();
+        var gen = G.gen;
+        G.pauseTimer = setTimeout(function(){
+          if (gen === G.gen && S.playing && S.ttsEngine === "google") speakGoogle();
+        }, 450);
+      } else speakGoogle();
     });
     ttsAudio.addEventListener("error", function(){
       if (!S.playing || !G.hasAudio || S.ttsEngine !== "google") return;
       googleVoiceFailed();
     });
+    ttsAudio.addEventListener("timeupdate", function(){
+      // follow the voice inside the chunk: media position -> character offset -> sentence
+      if (!S.playing || S.ttsEngine !== "google" || !G.cur || !ttsAudio.duration) return;
+      var pos = (ttsAudio.currentTime / ttsAudio.duration) * G.cur.text.length;
+      var spans = G.cur.spans;
+      for (var i = 0; i < spans.length; i++){
+        if (pos >= spans[i].start && pos < spans[i].end){
+          if (S.sentIdx !== spans[i].idx){ S.sentIdx = spans[i].idx; highlightSent(); }
+          break;
+        }
+      }
+    });
   }
   return ttsAudio;
 }
-function playGoogleSeg(){
+function playGoogleItem(item){
   var b = curBook(); if (!b) return;
   var a = ensureTtsAudio(), gen = G.gen;
   if ("preservesPitch" in a) a.preservesPitch = true;
   a.playbackRate = S.rate;
-  a.src = gtUrl(G.segs[G.si], b.lang || "vi");
+  a.src = gtUrl(item.text, b.lang || "vi");
   var p = a.play();
   if (p && p.catch) p.catch(function(){ if (gen === G.gen && S.playing && G.hasAudio) googleVoiceFailed(); });
-  prefetchGoogleNext();
 }
-function prefetchGoogleNext(){
+function prefetchGoogleNext(item){
   var b = curBook(); if (!b) return;
-  var url = null;
-  if (G.si + 1 < G.segs.length) url = gtUrl(G.segs[G.si + 1], b.lang || "vi");
-  else if (G.sentIdx + 1 < S.sents.length){
-    var ns = googleSegments(S.sents[G.sentIdx + 1], b.lang || "vi");
-    if (ns.length) url = gtUrl(ns[0], b.lang || "vi");
-  }
-  if (url){ var pre = new Audio(); pre.preload = "auto"; pre.src = url; G.pre = pre; }
+  G.pre = null;
+  if (item.nextIdx >= S.sents.length) return;
+  var nxt = buildItem(item.nextIdx, item.nextPiece);
+  if (nxt) G.pre = gtAudio(gtUrl(nxt.text, b.lang || "vi"));
 }
 function speakGoogle(){
   var b = curBook(); if (!b) return;
   if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
-  var segs = googleSegments(S.sents[S.sentIdx], b.lang || "vi");
-  if (!segs.length){ S.sentIdx++; speakGoogle(); return; }
-  G.gen++; G.segs = segs; G.si = 0; G.sentIdx = S.sentIdx; G.hasAudio = true;
-  playGoogleSeg();
+  var item = buildItem(S.sentIdx, G.piece || 0);
+  G.piece = 0;
+  if (!item){ nextChapterOrStop(); return; }
+  G.gen++; G.cur = item; G.hasAudio = true;
+  S.sentIdx = item.first;
   highlightSent();
+  playGoogleItem(item);
+  prefetchGoogleNext(item);
 }
 function haltGoogleAudio(){
-  G.gen++; G.hasAudio = false;
+  G.gen++; G.hasAudio = false; G.cur = null; G.piece = 0;
+  if (G.pauseTimer){ clearTimeout(G.pauseTimer); G.pauseTimer = null; }
   if (ttsAudio){ ttsAudio.pause(); ttsAudio.removeAttribute("src"); try { ttsAudio.load(); } catch (e) {} }
 }
 function googleVoiceFailed(){
@@ -1112,6 +1202,7 @@ function googleVoiceFailed(){
     toast("Không tải được giọng Google Dịch và trình duyệt cũng không có giọng dự phòng. Hãy kiểm tra mạng rồi bấm Nghe lại.", 6000);
     return;
   }
+  var vn = $("voiceName"); if (vn) vn.textContent = "Giọng máy (dự phòng)";
   toast("Không tải được giọng Google Dịch (mạng?) — tạm đọc bằng giọng có sẵn trong máy.", 5000);
   if (S.playing) speakCurrent();
 }
@@ -1212,7 +1303,7 @@ function playFrom(i){
   if (S.mode === "tts"){
     stopTestClip();
     // paused mid-sentence with the Google voice: resume exactly where it stopped
-    if (S.ttsEngine === "google" && ttsAudio && G.hasAudio && G.sentIdx === (i || 0) && ttsAudio.paused && !ttsAudio.ended){
+    if (S.ttsEngine === "google" && ttsAudio && G.hasAudio && G.cur && (i || 0) >= G.cur.first && (i || 0) <= G.cur.last && ttsAudio.paused && !ttsAudio.ended){
       S.playing = true; updatePlayBtn();
       ttsAudio.playbackRate = S.rate;
       var rp = ttsAudio.play();
@@ -1432,7 +1523,7 @@ function testSpeak(text){
   var t = normalizeForSpeech(text, "vi");
   if (t.length > 190) t = t.slice(0, 190);
   stopTestClip();
-  var a = new Audio(gtUrl(t, "vi"));
+  var a = gtAudio(gtUrl(t, "vi"));
   S.testAudio = a;
   a.playbackRate = S.rate;
   var fellBack = false;
