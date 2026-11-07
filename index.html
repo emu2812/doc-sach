@@ -1,0 +1,1453 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#b45309" />
+    <link rel="icon" href="data:," />
+    <link rel="manifest" href="data:application/octet-stream;base64,eyJiYWNrZ3JvdW5kX2NvbG9yIjoiI2Y0ZWZlNiIsImRlc2NyaXB0aW9uIjoixJDhu41jIHPDoWNoIHRow6BuaCB0aeG6v25nLCBs4buNYyBxdeG6o25nIGPDoW8sIHNvw6F0IGzhu5dpIE9DUiwgZOG7i2NoIHPDoWNoIGdp4buvIG5ndXnDqm4gY+G6pXUgdHLDumMsIGfhuq9uIGxpbmsgWW91VHViZSBuaMawIG3hu5l0IGN14buRbiBzw6FjaC4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImxhbmciOiJ2aSIsIm5hbWUiOiLEkOG7jWMgU8OhY2ggQuG6sW5nIEdp4buNbmcgTsOzaSDigJQgQuG6o24gQ8O0bmcgS2hhaSIsInNjb3BlIjoiLi4vIiwic2hvcnRfbmFtZSI6IsSQ4buNYyBTw6FjaCBOw7NpIiwic3RhcnRfdXJsIjoiLi4vIiwidGhlbWVfY29sb3IiOiIjYjQ1MzA5In0=" />
+    <title>Đọc Sách Bằng Giọng Nói — Bản Công Khai</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
+    <style>
+      :root{
+        --bg:#f4efe6; --panel:#fffdf8; --panel2:#efe8da; --ink:#23201a; --ink2:#5c5546;
+        --line:#ddd2bf; --accent:#b45309; --accent-ink:#ffffff; --accent-soft:#f7e3c8;
+        --ok:#2f7d4f; --warn:#b91c1c; --warn-soft:#fbe3e0; --hl:#ffe08a; --hl-ink:#23201a;
+        --radius:10px; --uifont:"Be Vietnam Pro",system-ui,sans-serif;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{ --bg:#171410; --panel:#221e18; --panel2:#2b261e; --ink:#efe9db; --ink2:#b8ae99;
+          --line:#3d362b; --accent:#e08a2e; --accent-ink:#1c1712; --accent-soft:#40331e;
+          --ok:#6fce93; --warn:#f0938a; --warn-soft:#4a2622; --hl:#8a6d1f; --hl-ink:#fff7dd; }
+      }
+      *{ box-sizing:border-box; }
+      html,body{ margin:0; padding:0; }
+      body{ background:var(--bg); color:var(--ink); font-family:var(--uifont); font-size:15px; line-height:1.5; }
+      body.big-ui{ font-size:18px; }
+      button{ font-family:inherit; font-size:inherit; cursor:pointer; }
+      input,select,textarea{ font-family:inherit; font-size:inherit; color:var(--ink); }
+      a{ color:var(--accent); }
+
+      .topbar{ position:sticky; top:0; z-index:40; background:var(--panel); border-bottom:1px solid var(--line);
+        display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 12px; }
+      .topbar .spacer{ flex:1; }
+      .btn{ background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-weight:500; }
+      .btn:hover{ border-color:var(--accent); }
+      .btn.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+      .btn.ghost{ background:transparent; }
+      .btn.small{ padding:4px 9px; font-size:.88em; border-radius:7px; }
+      .btn.danger{ color:var(--warn); }
+      .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+      body.big-ui .btn{ padding:11px 16px; }
+      select,.txtin{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 9px; }
+      textarea.txtin{ width:100%; min-height:64px; resize:vertical; }
+      label.lbl{ font-size:.85em; color:var(--ink2); display:block; margin:8px 0 3px; }
+      .chip{ display:inline-block; background:var(--accent-soft); border-radius:20px; padding:1px 9px; font-size:.8em; margin:0 4px 4px 0; }
+      .chip.warn{ background:var(--warn-soft); color:var(--warn); }
+      .muted{ color:var(--ink2); font-size:.9em; }
+      .small{ font-size:.85em; }
+
+      .layout{ display:grid; grid-template-columns:272px minmax(0,1fr) 348px; gap:12px; padding:12px; max-width:1560px; margin:0 auto; align-items:start; }
+      .card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; }
+      .card h2{ font-size:1.02em; margin:0 0 8px; }
+      .card h3{ font-size:.95em; margin:12px 0 6px; }
+      .side{ position:sticky; top:64px; max-height:calc(100vh - 76px); overflow:auto; }
+      .tools{ position:sticky; top:64px; max-height:calc(100vh - 76px); overflow:auto; }
+
+      .folder{ margin-bottom:10px; }
+      .folder-head{ display:flex; justify-content:space-between; align-items:center; font-weight:600; font-size:.92em; margin:8px 0 4px; }
+      .bookitem{ display:block; width:100%; text-align:left; background:transparent; border:1px solid transparent; border-radius:8px; padding:7px 8px; color:var(--ink); }
+      .bookitem:hover{ background:var(--panel2); }
+      .bookitem.active{ background:var(--accent-soft); border-color:var(--accent); }
+      .bookitem .t{ font-weight:600; display:block; }
+      .bookitem .m{ font-size:.8em; color:var(--ink2); display:block; }
+      .dropzone{ border:2px dashed var(--line); border-radius:var(--radius); padding:14px; text-align:center; color:var(--ink2); }
+      .dropzone.over{ border-color:var(--accent); background:var(--accent-soft); color:var(--ink); }
+
+      /* Reader themes */
+      .reader{ --rbg:#fffdf4; --rink:#262219; --rline:#e5dcc6; background:var(--rbg); color:var(--rink); border:1px solid var(--rline); border-radius:var(--radius); padding:26px 30px; min-height:50vh; }
+      .reader.theme-giay{ --rbg:#fffdf4; --rink:#262219; --rline:#e5dcc6; }
+      .reader.theme-sepia{ --rbg:#f3e6cf; --rink:#43331d; --rline:#ddc9a3; }
+      .reader.theme-toi-am{ --rbg:#2b2118; --rink:#efdfc2; --rline:#57452c; }
+      .reader.theme-oled{ --rbg:#000000; --rink:#e8e8e8; --rline:#2c2c2c; }
+      .reader.theme-eink{ --rbg:#f4f4f0; --rink:#111111; --rline:#c9c9c2; }
+      .reader.font-serif{ font-family:"Noto Serif",Georgia,serif; }
+      .reader.font-sans{ font-family:"Be Vietnam Pro",system-ui,sans-serif; }
+      .reader h1.chtitle{ font-size:1.45em; margin:0 0 4px; line-height:1.3; }
+      .reader .chmeta{ color:var(--ink2); font-size:.85em; margin-bottom:14px; }
+      .reader p{ margin:0 0 1em; }
+      .reader p.adpara{ opacity:.45; }
+      .reader .sent{ border-radius:3px; padding:0 1px; cursor:pointer; }
+      .reader .sent:hover{ background:color-mix(in srgb, var(--hl) 45%, transparent); }
+      .reader .sent.cur{ background:var(--hl); color:var(--hl-ink); }
+      .reader .adtag{ font-size:.72em; background:var(--warn-soft); color:var(--warn); border-radius:4px; padding:0 5px; margin-left:6px; vertical-align:middle; }
+      .paraedit{ float:right; }
+
+      .player{ position:sticky; bottom:0; z-index:40; background:var(--panel); border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom)); }
+      .player .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; max-width:1560px; margin:0 auto; }
+      .player .prog{ flex:1 1 180px; min-width:140px; }
+      progress{ width:100%; height:8px; accent-color:var(--accent); }
+      .pbtn{ min-width:46px; min-height:42px; font-size:1.05em; }
+      body.big-ui .pbtn{ min-width:58px; min-height:52px; font-size:1.2em; }
+
+      .tabs{ display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+      .tabs button{ background:transparent; border:1px solid var(--line); border-radius:16px; padding:4px 11px; font-size:.88em; }
+      .tabs button.on{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+      .item{ border:1px solid var(--line); border-radius:8px; padding:9px; margin-bottom:8px; background:var(--panel); }
+      .item .orig{ font-weight:600; }
+      .item img.pageimg{ max-width:100%; border:1px solid var(--line); border-radius:6px; margin-top:6px; }
+      .item .rowb{ display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
+      .hidden{ display:none !important; }
+      .toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:96px; z-index:80; background:var(--ink); color:var(--bg);
+        padding:9px 16px; border-radius:20px; font-size:.92em; box-shadow:0 4px 18px rgba(0,0,0,.25); max-width:92vw; text-align:center; }
+      .kbd{ background:var(--panel2); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:.85em; }
+      .ytwrap{ position:relative; padding-top:56.25%; background:#000; border-radius:8px; overflow:hidden; }
+      .ytwrap iframe,.ytwrap #ytplayer{ position:absolute; inset:0; width:100%; height:100%; }
+      audio{ width:100%; }
+      .range{ width:110px; vertical-align:middle; }
+      .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+      @media (max-width:1080px){
+        .layout{ grid-template-columns:230px minmax(0,1fr); }
+        .tools{ grid-column:1 / -1; position:static; max-height:none; }
+      }
+      #btnMore{ display:none; }
+      @media (max-width:720px){
+        #btnMore{ display:inline-block; }
+        .player .pset{ display:none; }
+        .player.open .pset{ display:block; }
+      }
+      @media (max-width:720px){
+        .layout{ grid-template-columns:minmax(0,1fr); padding:8px 8px 430px; }
+        .side{ position:static; max-height:none; }
+        .reader{ padding:18px 14px; }
+        .grid2{ grid-template-columns:1fr; }
+        .player{ padding:7px 8px calc(7px + env(safe-area-inset-bottom)); }
+        .player .row{ gap:5px; }
+        .pbtn{ min-width:40px; min-height:38px; font-size:.95em; padding:4px 7px; }
+        .player .prog{ flex:1 1 100%; order:6; }
+        .player select{ max-width:118px; padding:5px 6px; }
+        .player .lbl{ font-size:.75em; }
+      }
+      @media (min-width:721px){
+        .layout{ padding-bottom:230px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <button class="btn" id="btnLib">☰ Thư viện</button>
+      <button class="btn primary" id="btnAddTop">＋ Thêm sách</button>
+      <span class="spacer"></span>
+      <label class="small muted" for="uiBig">Chữ to</label>
+      <input type="checkbox" id="uiBig" />
+      <button class="btn" id="btnInstall">Cài như ứng dụng</button>
+      <button class="btn" id="btnExport">Xuất văn bản sạch</button>
+    </div>
+
+    <div class="layout">
+      <!-- ============ LIBRARY ============ -->
+      <aside class="card side" id="libPanel">
+        <h2>Thư viện của bạn</h2>
+        <div class="dropzone" id="dropzone">
+          Kéo thả file vào đây hoặc
+          <button class="btn small primary" id="btnPick">Chọn file</button>
+          <div class="small" style="margin-top:6px">PDF · Word (.docx) · EPUB · TXT · Excel (.xlsx) · PowerPoint (.pptx) · CSV · Ảnh (OCR) · Âm thanh</div>
+          <input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.docx,.epub,.txt,.md,.csv,.tsv,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.opus" />
+        </div>
+
+        <label class="lbl" for="ocrLang">Ngôn ngữ sách / OCR</label>
+        <select id="ocrLang" style="width:100%">
+          <option value="vie">Tiếng Việt</option>
+          <option value="eng">English</option>
+          <option value="vie+eng">Việt + Anh</option>
+          <option value="fra">Français</option>
+          <option value="deu">Deutsch</option>
+          <option value="jpn">日本語</option>
+          <option value="kor">한국어</option>
+          <option value="chi_sim">中文 (giản thể)</option>
+        </select>
+
+        <h3>Dán văn bản</h3>
+        <input class="txtin" id="pasteTitle" placeholder="Tên sách / ghi chú" style="width:100%" />
+        <textarea class="txtin" id="pasteText" placeholder="Dán nội dung sách vào đây…" style="margin-top:6px"></textarea>
+        <button class="btn small" id="btnPaste" style="margin-top:6px">Thêm vào thư viện</button>
+        <button class="btn small ghost" id="btnSample">Nạp văn bản mẫu để thử</button>
+
+        <h3>Gắn link YouTube như một cuốn sách</h3>
+        <input class="txtin" id="ytUrl" placeholder="https://www.youtube.com/watch?v=…" style="width:100%" />
+        <button class="btn small" id="btnYt" style="margin-top:6px">Thêm video vào thư viện</button>
+
+        <h3>Thư mục</h3>
+        <div style="display:flex;gap:6px">
+          <input class="txtin" id="newFolder" placeholder="Tên thư mục mới" style="flex:1" />
+          <button class="btn small" id="btnFolder">Tạo</button>
+        </div>
+        <div id="libList" style="margin-top:10px"></div>
+        <p class="muted small">Sách trong bản công khai này được giữ trong phiên mở trang hiện tại. Muốn giữ lâu dài, hãy dùng nút “Xuất văn bản sạch” để tải file về máy.</p>
+      </aside>
+
+      <!-- ============ READER ============ -->
+      <main>
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            <strong id="nowTitle">Chưa có sách nào</strong>
+            <span class="spacer" style="flex:1"></span>
+            <label class="small muted">Chương</label>
+            <select id="chapSel" style="max-width:250px"></select>
+            <button class="btn small" id="btnPrevCh">‹ Trước</button>
+            <button class="btn small" id="btnNextCh">Sau ›</button>
+          </div>
+          <div class="muted small" id="bookMeta" style="margin-top:4px">Hãy thêm sách ở cột thư viện bên trái (trên điện thoại: nút “Thư viện”).</div>
+          <div id="mediaBox" class="hidden" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+            <div><label class="lbl">Phông chữ</label>
+              <select id="setFont"><option value="serif">Serif (giống sách)</option><option value="sans">Sans (dễ đọc)</option></select></div>
+            <div><label class="lbl">Cỡ chữ: <span id="fsVal">19</span>px</label>
+              <input type="range" class="range" id="setSize" min="15" max="34" value="19" /></div>
+            <div><label class="lbl">Giãn dòng: <span id="lhVal">1.8</span></label>
+              <input type="range" class="range" id="setLH" min="1.3" max="2.6" step="0.1" value="1.8" /></div>
+            <div><label class="lbl">Nền đọc</label>
+              <div>
+                <button class="btn small themeBtn" data-th="giay">Giấy</button>
+                <button class="btn small themeBtn" data-th="sepia">Sepia</button>
+                <button class="btn small themeBtn" data-th="toi-am">Tối ấm</button>
+                <button class="btn small themeBtn" data-th="oled">OLED</button>
+                <button class="btn small themeBtn" data-th="eink">E-ink</button>
+              </div></div>
+          </div>
+        </div>
+
+        <div class="reader font-serif theme-giay" id="reader" style="font-size:19px;line-height:1.8">
+          <p class="muted">Nội dung sách sẽ hiện ở đây. Khi nghe đọc, câu đang đọc được tô sáng và trang tự cuộn theo giọng. Chạm vào bất kỳ câu nào để sách nói đọc từ đúng chỗ đó.</p>
+        </div>
+        <p class="muted small" style="margin-top:8px">Mẹo: bấm vào một câu để nghe từ câu đó. Nút ✎ ở cuối mỗi đoạn cho phép sửa chữ trực tiếp — sách nói sẽ đọc theo bản đã sửa.</p>
+      </main>
+
+      <!-- ============ TOOLS ============ -->
+      <aside class="card tools">
+        <div class="tabs" id="toolTabs">
+          <button data-tab="ads" class="on">Quảng cáo</button>
+          <button data-tab="proof">Soát lỗi</button>
+          <button data-tab="pron">Phát âm</button>
+          <button data-tab="chap">Chương &amp; thời lượng</button>
+          <button data-tab="trans">Dịch sách</button>
+          <button data-tab="notes">Ghi chú</button>
+          <button data-tab="log">Nhật ký sửa</button>
+        </div>
+
+        <section id="tab-ads">
+          <p class="small muted">Máy tự tìm lời mời mua hàng, số hotline, link và dấu nguồn website chèn trong sách. Bấm <b>Ẩn</b> thì sách nói bỏ qua đoạn đó; bấm <b>Giữ lại</b> thì đọc bình thường. Bạn sửa trực tiếp nội dung máy đoán được trước khi quyết định.</p>
+          <button class="btn small primary" id="btnScanAds">Quét lại quảng cáo</button>
+          <span class="small muted" id="adsCount"></span>
+          <div id="adsList" style="margin-top:8px"></div>
+        </section>
+
+        <section id="tab-proof" class="hidden">
+          <p class="small muted">Các chỗ chữ có thể sai do nhận dạng (OCR) hoặc gõ nhầm: từ chứa số lẫn chữ, ký tự lạ, chữ hoa lạc giữa từ… Mỗi chỗ có gợi ý sửa — sửa lại theo ý bạn rồi nhấn <span class="kbd">Enter</span> để áp dụng cho <b>mọi chỗ giống hệt</b> trong sách.</p>
+          <button class="btn small primary" id="btnScanProof">Quét lại lỗi</button>
+          <span class="small muted" id="proofCount"></span>
+          <div id="proofList" style="margin-top:8px"></div>
+        </section>
+
+        <section id="tab-pron" class="hidden">
+          <p class="small muted">Số, ngày tháng, tiền, m², số La Mã… được tự đọc thành lời tự nhiên khi nghe. Từ viết tắt thì bạn dạy cách đọc một lần — ví dụ NPK → “en nờ pê ca”, pH → “pê hát” — rồi nghe thử ngay.</p>
+          <div class="grid2">
+            <div><label class="lbl">Từ viết tắt / ký hiệu</label><input class="txtin" id="pronFrom" placeholder="NPK" style="width:100%" /></div>
+            <div><label class="lbl">Đọc thành</label><input class="txtin" id="pronTo" placeholder="en nờ pê ca" style="width:100%" /></div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn small primary" id="btnPronAdd">Lưu cách đọc</button>
+            <button class="btn small" id="btnPronTest">Nghe thử câu mẫu</button>
+          </div>
+          <input class="txtin" id="pronTestText" style="width:100%;margin-top:8px" value="Bón 5 kg NPK, độ pH là 6,5, diện tích 120 m², giá 1.250.000đ, ngày 07/11/2026, chương IV." />
+          <div id="pronList" style="margin-top:10px"></div>
+        </section>
+
+        <section id="tab-chap" class="hidden">
+          <p class="small muted">Thời lượng nghe ước tính theo tốc độ hiện tại. Nghe hết chương này máy tự chuyển chương sau.</p>
+          <div id="chapList"></div>
+        </section>
+
+        <section id="tab-trans" class="hidden">
+          <p class="small muted">Dịch giữ nguyên cấu trúc: chương, tiêu đề, đoạn và thứ tự y hệt bản gốc — chỉ đổi ngôn ngữ. Bản dịch thành một cuốn riêng trong thư viện và nghe được bằng giọng đúng ngôn ngữ đích. Dịch qua dịch vụ dịch miễn phí trực tuyến nên sách dài sẽ dịch theo từng chương.</p>
+          <label class="lbl">Dịch sang</label>
+          <select id="transLang" style="width:100%">
+            <option value="en">English</option><option value="vi">Tiếng Việt</option>
+            <option value="fr">Français</option><option value="de">Deutsch</option>
+            <option value="es">Español</option><option value="ja">日本語</option>
+            <option value="ko">한국어</option><option value="zh-CN">中文</option><option value="ru">Русский</option>
+          </select>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn small primary" id="btnTransChap">Dịch chương này</button>
+            <button class="btn small" id="btnTransAll">Dịch cả sách</button>
+          </div>
+          <div class="small" id="transProg" style="margin-top:8px"></div>
+        </section>
+
+        <section id="tab-notes" class="hidden">
+          <p class="small muted">Ghi chú gắn với đúng vị trí đang đọc (theo chương và câu; với video YouTube là theo mốc giây). Bấm vào ghi chú để nhảy tới chỗ đó.</p>
+          <textarea class="txtin" id="noteText" placeholder="Viết ghi chú cho chỗ đang đọc…"></textarea>
+          <button class="btn small primary" id="btnNoteAdd" style="margin-top:6px">Lưu ghi chú tại vị trí này</button>
+          <div id="notesList" style="margin-top:10px"></div>
+        </section>
+
+        <section id="tab-log" class="hidden">
+          <p class="small muted">Mọi lần sửa chữ, ẩn quảng cáo hay đổi cách đọc đều ghi lại ở đây: trước → sau, kèm ghi chú của bạn. Sách nói luôn đọc theo bản mới nhất đã sửa.</p>
+          <div id="logList"></div>
+        </section>
+      </aside>
+    </div>
+
+    <!-- ============ PLAYER ============ -->
+    <div class="player">
+      <div class="row">
+        <button class="btn pbtn" id="btnBack15" title="Lùi khoảng 15 giây">⏪ 15s</button>
+        <button class="btn pbtn" id="btnPrevSent" title="Câu trước">⏮</button>
+        <button class="btn pbtn primary" id="btnPlay" style="min-width:64px">▶ Nghe</button>
+        <button class="btn pbtn" id="btnNextSent" title="Câu sau">⏭</button>
+        <button class="btn pbtn" id="btnFwd30" title="Tua khoảng 30 giây">30s ⏩</button>
+        <button class="btn pbtn" id="btnMore" title="Tuỳ chọn nghe">⚙</button>
+        <div class="prog">
+          <progress id="progBar" value="0" max="100"></progress>
+          <div class="small muted" id="progText">Chưa phát</div>
+        </div>
+        <div class="pset"><label class="lbl" style="margin:0">Tốc độ</label>
+          <select id="setRate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select></div>
+        <div class="pset"><label class="lbl" style="margin:0">Giọng đọc</label>
+          <select id="setVoice" style="max-width:190px"></select></div>
+        <div class="pset"><label class="lbl" style="margin:0">Hẹn giờ tắt</label>
+          <select id="setSleep"><option value="0">Không hẹn</option><option value="5">5 phút</option><option value="10">10 phút</option><option value="15">15 phút</option><option value="30">30 phút</option><option value="60">60 phút</option><option value="-1">Hết chương</option></select></div>
+        <div class="pset"><label class="lbl" style="margin:0">Âm nền</label>
+          <button class="btn small" id="btnAmb">Tắt</button>
+          <input type="range" class="range" id="ambVol" min="0" max="100" value="18" style="width:70px" /></div>
+      </div>
+    </div>
+
+    <div class="toast hidden" id="toast"></div>
+    <div class="card hidden" id="installCard" style="position:fixed;right:12px;bottom:110px;z-index:70;max-width:320px">
+      <b>Cài như ứng dụng</b>
+      <p class="small muted" id="installText">Bấm nút bên dưới để cài biểu tượng riêng ra màn hình — mở lên là cửa sổ riêng như ứng dụng thật, nghe sách nói vẫn chạy khi tắt màn hình (với file âm thanh).</p>
+      <button class="btn small primary" id="btnDoInstall">Cài ngay</button>
+      <button class="btn small ghost" id="btnHideInstall">Để sau</button>
+    </div>
+
+<script>
+"use strict";
+/* ================= STATE ================= */
+var S = {
+  books: [], folders: ["Chưa phân loại"], cur: null, chapIdx: 0,
+  sents: [], sentIdx: 0, playing: false, mode: "tts", // tts | audio | yt
+  rate: 1, sleepTimer: null, sleepEndChapter: false,
+  pron: {}, log: [], notes: [], voices: [],
+  ads: {}, proof: {}, pageImgs: {}, // per bookId
+  ytPlayer: null, ytReady: false, audioEl: null, ambOn: false, ambGain: null, ambCtx: null,
+  deferredInstall: null
+};
+var $ = function (id) { return document.getElementById(id); };
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function uid(){ return "b" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function toast(msg, ms){
+  var t = $("toast"); t.textContent = msg; t.classList.remove("hidden");
+  clearTimeout(t._h); t._h = setTimeout(function(){ t.classList.add("hidden"); }, ms || 3400);
+}
+function curBook(){ return S.books.find(function(b){ return b.id === S.cur; }) || null; }
+function logEdit(bookId, kind, before, after, note){
+  S.log.unshift({ id: uid(), bookId: bookId, kind: kind, before: String(before||"").slice(0,220), after: String(after||"").slice(0,220), note: note || "", time: new Date().toLocaleString("vi-VN") });
+  renderLog();
+}
+
+/* ================= VIETNAMESE NUMBER WORDS ================= */
+var DIG = ["không","một","hai","ba","bốn","năm","sáu","bảy","tám","chín"];
+function threeDigits(n, full){
+  var h = Math.floor(n/100), t = Math.floor((n%100)/10), u = n%10, out = "";
+  if (h > 0){ out += DIG[h] + " trăm"; }
+  else if (full){ out += "không trăm"; }
+  if (t === 0){
+    if (u > 0){ if (out) out += " lẻ"; out += " " + DIG[u]; }
+  } else if (t === 1){
+    out += (out ? " " : "") + "mười";
+    if (u === 5) out += " lăm"; else if (u > 0) out += " " + DIG[u];
+  } else {
+    out += (out ? " " : "") + DIG[t] + " mươi";
+    if (u === 1) out += " mốt"; else if (u === 5) out += " lăm"; else if (u > 0) out += " " + DIG[u];
+  }
+  return out.trim();
+}
+function numWords(numStr){
+  var n = parseInt(numStr, 10);
+  if (isNaN(n)) return numStr;
+  if (n === 0) return "không";
+  if (n < 0) return "âm " + numWords(String(-n));
+  var groups = ["", " nghìn", " triệu", " tỷ", " nghìn tỷ", " triệu tỷ"];
+  var parts = [], g = 0;
+  while (n > 0 && g < groups.length){
+    var chunk = n % 1000;
+    if (chunk > 0) parts.unshift(threeDigits(chunk, g > 0) + groups[g]);
+    n = Math.floor(n / 1000); g++;
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+function romanToInt(r){
+  var map = {I:1,V:5,X:10,L:50,C:100,D:500,M:1000}, total = 0, prev = 0;
+  r = r.toUpperCase();
+  for (var i = r.length - 1; i >= 0; i--){
+    var v = map[r[i]]; if (!v) return null;
+    total += (v < prev) ? -v : v; prev = v;
+  }
+  return (total > 0 && total <= 3999) ? total : null;
+}
+
+/* ================= SPEECH NORMALIZATION ================= */
+function normalizeForSpeech(text, lang){
+  var t = " " + text + " ";
+  // user-taught pronunciations first (longest keys first)
+  var keys = Object.keys(S.pron).sort(function(a,b){ return b.length - a.length; });
+  keys.forEach(function(k){
+    var re = new RegExp("(^|[^\\p{L}\\p{N}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "giu");
+    t = t.replace(re, function(m, p1){ return p1 + S.pron[k] + " "; });
+  });
+  if (lang && lang.indexOf("vi") !== 0) return t.trim(); // number-word rules below are Vietnamese
+  // dates dd/mm/yyyy and dd-mm-yyyy
+  t = t.replace(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\b/g, function(m, d, mo, y){
+    return "ngày " + numWords(d) + " tháng " + numWords(mo) + " năm " + numWords(y);
+  });
+  // time hh:mm / hh giờ mm
+  t = t.replace(/\b(\d{1,2}):(\d{2})\b/g, function(m, h, mi){ return numWords(h) + " giờ " + (mi === "00" ? "" : numWords(mi) + " phút"); });
+  t = t.replace(/\b(\d{1,2})h(\d{2})\b/g, function(m, h, mi){ return numWords(h) + " giờ " + numWords(mi) + " phút"; });
+  // roman numerals (standalone, at least 2 chars or I/V/X alone after space+capital context)
+  t = t.replace(/\b([IVXLCDM]{2,})\b/g, function(m){ var v = romanToInt(m); return v ? numWords(String(v)) : m; });
+  // units
+  t = t.replace(/(\d[\d.,]*)\s*m²/g, "$1 mét vuông").replace(/(\d[\d.,]*)\s*m2\b/g, "$1 mét vuông");
+  t = t.replace(/(\d[\d.,]*)\s*km\/h/g, "$1 ki lô mét trên giờ");
+  t = t.replace(/(\d[\d.,]*)\s*°C/g, "$1 độ C");
+  t = t.replace(/(\d[\d.,]*)\s*%/g, "$1 phần trăm");
+  t = t.replace(/(\d[\d.,]*)\s*(kg|km|cm|mm|ml)\b/g, function(m, n, u){
+    var name = {kg:"ki lô gam", km:"ki lô mét", cm:"xăng ti mét", mm:"mi li mét", ml:"mi li lít"}[u]; return n + " " + name;
+  });
+  // money: number + đ / đồng / VNĐ
+  t = t.replace(/(\d{1,3}(?:\.\d{3})+|\d+)\s*(đ|đồng|VNĐ|vnđ)/g, function(m, n){ return numStrWords(n) + " đồng"; });
+  // decimals with comma: 6,5 -> sáu phẩy năm
+  t = t.replace(/\b(\d+),(\d+)\b/g, function(m, a, b){ return numWords(a) + " phẩy " + b.split("").map(function(c){ return DIG[+c]; }).join(" "); });
+  // thousands-separated or plain integers
+  t = t.replace(/\b\d{1,3}(?:\.\d{3})+\b|\b\d{4,}\b/g, function(m){ return numStrWords(m); });
+  t = t.replace(/\b\d{1,3}\b/g, function(m){ return numWords(m); });
+  return t.replace(/\s+/g, " ").trim();
+}
+function numStrWords(s){
+  var clean = String(s).replace(/\./g, "");
+  if (clean.length > 12) return s.split("").map(function(c){ return /\d/.test(c) ? DIG[+c] : c; }).join(" ");
+  return numWords(clean);
+}
+
+/* ================= TEXT -> CHAPTERS / SENTENCES ================= */
+function splitChaptersFromText(raw, fallbackTitle){
+  var lines = raw.replace(/\r\n?/g, "\n").split("\n");
+  var chapters = [], cur = null;
+  var headRe = /^\s*(chương|chuong|chapter|phần|phan|bài|bai|mục|hồi)\s+([\dIVXLCDM]+|[a-zà-ỹ]+)?\b[:.\-–—]?\s*(.*)$/i;
+  function push(line){
+    if (!cur){ cur = { title: fallbackTitle || "Nội dung", paras: [] }; chapters.push(cur); }
+    cur.paras.push(line);
+  }
+  lines.forEach(function(line){
+    var s = line.trim();
+    var m = s.match(headRe);
+    if (m && s.length < 120){
+      cur = { title: s, paras: [] }; chapters.push(cur);
+    } else if (s){
+      // split long lines into paragraphs at blank-ish boundaries handled by caller; keep line as paragraph chunk
+      push(s);
+    }
+  });
+  // merge tiny chapters into paragraphs flow: merge runs of lines into paragraphs by joining short lines
+  chapters.forEach(function(ch){
+    var merged = [], buf = "";
+    ch.paras.forEach(function(p){
+      if (buf && (buf.length < 60 || !/[.!?…:;”"]$/.test(buf)) && p.length < 200){ buf += " " + p; }
+      else { if (buf) merged.push(buf); buf = p; }
+    });
+    if (buf) merged.push(buf);
+    ch.paras = merged.length ? merged : ch.paras;
+  });
+  return chapters.filter(function(c){ return c.paras.length || chapters.length === 1; });
+}
+function splitSentences(para){
+  var parts = para.match(/[^.!?…]+[.!?…]+["”’)]*\s*|[^.!?…]+$/g);
+  return (parts || [para]).map(function(s){ return s.trim(); }).filter(Boolean);
+}
+function bookWords(book){
+  return book.chapters.reduce(function(a, ch){ return a + ch.paras.join(" ").split(/\s+/).filter(Boolean).length; }, 0);
+}
+function estMinutes(words, rate){
+  return Math.max(1, Math.round(words / 150 / (rate || 1)));
+}
+
+/* ================= AD DETECTION ================= */
+var AD_RULES = [
+  { re: /(hotline|tổng đài|đường dây nóng)/i, why: "Có chữ hotline/tổng đài" },
+  { re: /\b0\d{2,4}[.\s-]?\d{3,4}[.\s-]?\d{3,4}\b/, why: "Có số điện thoại" },
+  { re: /(https?:\/\/|www\.)\S+/i, why: "Có đường link website" },
+  { re: /\b[\w-]+\.(com|vn|net|org|info|xyz|top|site|online)\b/i, why: "Có tên miền website" },
+  { re: /(mua ngay|đặt hàng|đặt mua|liên hệ (ngay|để)|nhắn tin|inbox|để lại số điện thoại|tư vấn miễn phí)/i, why: "Lời mời mua hàng / liên hệ" },
+  { re: /(giảm giá|khuyến mãi|ưu đãi|sale|freeship|miễn phí vận chuyển|giá chỉ|chỉ với \d)/i, why: "Nội dung quảng cáo bán hàng" },
+  { re: /(zalo|fanpage|facebook|shopee|lazada|tiki|sendo)/i, why: "Nhắc tới kênh bán hàng / mạng xã hội" },
+  { re: /(nguồn\s*:|sưu tầm|tài liệu (được )?(chia sẻ|đăng) (tại|trên)|tải (thêm )?(tại|ở)|xem thêm tại)/i, why: "Dấu nguồn / lời dẫn ra website khác" },
+  { re: /(bản quyền|copyright|©)/i, why: "Dòng bản quyền chèn trong sách" }
+];
+function scanAds(book){
+  var found = [];
+  book.chapters.forEach(function(ch, ci){
+    ch.paras.forEach(function(p, pi){
+      var whys = [];
+      AD_RULES.forEach(function(r){ if (r.re.test(p)) whys.push(r.why); });
+      if (whys.length) found.push({ id: book.id + ":" + ci + ":" + pi, ci: ci, pi: pi, text: p, whys: whys, hidden: false });
+    });
+  });
+  return found;
+}
+
+/* ================= PROOFREAD DETECTION ================= */
+function suggestFix(tok){
+  var s = tok;
+  s = s.replace(/0/g, "o").replace(/1/g, "l").replace(/rn/g, "m").replace(/\|/g, "l");
+  s = s.replace(/(.)\1{2,}/g, "$1$1");
+  return s;
+}
+function scanProof(book){
+  var found = [], seen = {};
+  var wordRe = /[\p{L}\p{N}|]+/gu;
+  book.chapters.forEach(function(ch, ci){
+    ch.paras.forEach(function(p, pi){
+      var m; wordRe.lastIndex = 0;
+      while ((m = wordRe.exec(p))){
+        var tok = m[0], why = null;
+        if (/\p{L}/u.test(tok) && /\d/.test(tok)) why = "Số lẫn trong chữ (hay gặp khi OCR)";
+        else if (tok.indexOf("|") >= 0) why = "Có ký tự lạ “|”";
+        else if (/^[\p{Ll}]*\p{Lu}\p{Ll}*\p{Lu}/u.test(tok)) why = "Chữ hoa lạc giữa từ";
+        else if (/(.)\1{3,}/.test(tok)) why = "Một ký tự lặp bất thường";
+        else if (tok.length >= 4 && !/[aeiouyàáâãèéêìíòóôõùúăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(tok) && /\p{L}/u.test(tok)) why = "Từ lạ, không có nguyên âm";
+        if (why && !seen[tok]){
+          seen[tok] = 1;
+          found.push({ token: tok, why: why, sug: suggestFix(tok), ci: ci, pi: pi, page: ch.page != null ? ch.page : null });
+        }
+      }
+      // paragraph ending abruptly (possible missing line) — only flag middle paragraphs not ending with punctuation
+      if (pi > 0 && pi < ch.paras.length - 1 && p.length > 30 && !/[.!?…:;”"']$/.test(p.trim())){
+        var key = "¶" + ci + ":" + pi;
+        if (!seen[key]){ seen[key] = 1; found.push({ token: null, paraKey: key, why: "Đoạn không kết thúc bằng dấu câu — có thể thiếu dòng hoặc cụt câu", sug: "", ci: ci, pi: pi, page: ch.page != null ? ch.page : null, paraText: p }); }
+      }
+    });
+  });
+  return found.slice(0, 300);
+}
+function applyReplaceEverywhere(book, from, to){
+  var count = 0;
+  book.chapters.forEach(function(ch){
+    ch.paras = ch.paras.map(function(p){
+      var parts = p.split(from); count += parts.length - 1; return parts.join(to);
+    });
+  });
+  return count;
+}
+</script>
+
+<script>
+"use strict";
+/* ================= IMPORT ================= */
+function addBook(book){
+  book.id = book.id || uid();
+  book.folder = book.folder || "Chưa phân loại";
+  book.lang = book.lang || ($("ocrLang").value.indexOf("eng") === 0 ? "en" : "vi");
+  S.books.push(book);
+  if (book.type === "text"){
+    S.ads[book.id] = scanAds(book);
+    S.proof[book.id] = scanProof(book);
+  }
+  renderLibrary();
+  openBook(book.id);
+  toast("Đã thêm: " + book.title);
+}
+async function ocrImage(imageSource, lang){
+  if (typeof Tesseract === "undefined") throw new Error("Thư viện OCR chưa tải được (kiểm tra mạng).");
+  var res = await Tesseract.recognize(imageSource, lang || "vie", {});
+  return res.data.text || "";
+}
+async function importPDF(file){
+  if (typeof pdfjsLib === "undefined") throw new Error("Thư viện PDF chưa tải được.");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  var buf = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  var chapters = [], needOcrPages = [];
+  var lang = $("ocrLang").value;
+  for (var i = 1; i <= pdf.numPages; i++){
+    var page = await pdf.getPage(i);
+    var tc = await page.getTextContent();
+    var text = tc.items.map(function(it){ return it.str; }).join(" ").replace(/\s+/g, " ").trim();
+    if (text.length < 30) needOcrPages.push(i);
+    chapters.push({ title: "Trang " + i, paras: text ? [text] : [], page: i - 1 });
+  }
+  var book = { title: file.name.replace(/\.pdf$/i, ""), type: "text", chapters: chapters, pdfPages: pdf.numPages, needOcr: needOcrPages };
+  // store page images for OCR review + run OCR for textless pages on demand
+  book._pdf = pdf; book._file = file;
+  return book;
+}
+async function runPdfOcr(book){
+  var pdf = book._pdf; if (!pdf) return;
+  var lang = $("ocrLang").value;
+  var pages = (book.needOcr || []).slice();
+  if (!pages.length){ toast("Sách này đã có chữ sẵn, không cần OCR."); return; }
+  toast("Đang OCR " + pages.length + " trang scan… việc này chạy trên máy của bạn nên hơi lâu.", 5000);
+  for (var k = 0; k < pages.length; k++){
+    var pno = pages[k];
+    var page = await pdf.getPage(pno);
+    var vp = page.getViewport({ scale: 2 });
+    var cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+    await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+    var dataUrl = cv.toDataURL("image/jpeg", 0.82);
+    if (!S.pageImgs[book.id]) S.pageImgs[book.id] = {};
+    S.pageImgs[book.id][pno - 1] = dataUrl;
+    try {
+      var text = await ocrImage(dataUrl, lang);
+      var ch = book.chapters[pno - 1];
+      ch.paras = text.split(/\n+/).map(function(s){ return s.trim(); }).filter(Boolean);
+      toast("OCR xong trang " + pno + " / " + pages.length);
+    } catch (e){ toast("OCR trang " + pno + " lỗi: " + e.message); }
+  }
+  book.needOcr = [];
+  S.ads[book.id] = scanAds(book); S.proof[book.id] = scanProof(book);
+  if (S.cur === book.id){ renderReader(); renderAds(); renderProof(); }
+  renderLibrary();
+}
+async function importDOCX(file){
+  var buf = await file.arrayBuffer();
+  var result = await mammoth.convertToHtml({ arrayBuffer: buf });
+  var div = document.createElement("div"); div.innerHTML = result.value;
+  var chapters = [], cur = { title: file.name.replace(/\.docx$/i, ""), paras: [] };
+  chapters.push(cur);
+  Array.prototype.forEach.call(div.childNodes, function(node){
+    var tag = (node.tagName || "").toLowerCase(), txt = (node.textContent || "").trim();
+    if (!txt) return;
+    if (tag === "h1" || tag === "h2"){ cur = { title: txt, paras: [] }; chapters.push(cur); }
+    else cur.paras.push(txt);
+  });
+  return { title: file.name.replace(/\.docx$/i, ""), type: "text", chapters: chapters.filter(function(c){ return c.paras.length || chapters.length === 1; }) };
+}
+async function importEPUB(file){
+  var zip = await JSZip.loadAsync(await file.arrayBuffer());
+  var names = Object.keys(zip.files).filter(function(n){ return /\.x?html?$/i.test(n); }).sort();
+  var chapters = [];
+  for (var i = 0; i < names.length; i++){
+    var html = await zip.file(names[i]).async("string");
+    var div = document.createElement("div"); div.innerHTML = html;
+    var titleEl = div.querySelector("h1,h2,title");
+    var paras = [];
+    Array.prototype.forEach.call(div.querySelectorAll("p,h3,h4,li"), function(el){
+      var t = (el.textContent || "").trim(); if (t) paras.push(t);
+    });
+    if (paras.length) chapters.push({ title: titleEl ? titleEl.textContent.trim().slice(0, 90) : ("Phần " + (chapters.length + 1)), paras: paras });
+  }
+  if (!chapters.length) throw new Error("Không đọc được nội dung EPUB.");
+  return { title: file.name.replace(/\.epub$/i, ""), type: "text", chapters: chapters };
+}
+async function importXLSX(file){
+  var buf = await file.arrayBuffer();
+  var wb = XLSX.read(buf, { type: "array" });
+  var chapters = wb.SheetNames.map(function(name){
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "" });
+    var paras = rows.map(function(r){
+      return r.map(function(c){ return String(c).trim(); }).filter(Boolean).join(". ");
+    }).filter(Boolean);
+    return { title: "Trang tính: " + name, paras: paras.length ? paras : ["(Trang tính trống)"] };
+  });
+  return { title: file.name.replace(/\.xlsx?$/i, ""), type: "text", chapters: chapters };
+}
+async function importPPTX(file){
+  var zip = await JSZip.loadAsync(await file.arrayBuffer());
+  var names = Object.keys(zip.files).filter(function(n){ return /^ppt\/slides\/slide\d+\.xml$/.test(n); })
+    .sort(function(a, b){ return parseInt(a.match(/(\d+)\.xml/)[1], 10) - parseInt(b.match(/(\d+)\.xml/)[1], 10); });
+  var chapters = [];
+  for (var i = 0; i < names.length; i++){
+    var xml = await zip.file(names[i]).async("string");
+    var texts = [];
+    var re = /<a:t>([^<]*)<\/a:t>/g, m;
+    while ((m = re.exec(xml))) texts.push(m[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+    var joined = texts.join(" ").replace(/\s+/g, " ").trim();
+    chapters.push({ title: "Trang chiếu " + (i + 1), paras: joined ? [joined] : ["(Trang chiếu không có chữ)"] });
+  }
+  if (!chapters.length) throw new Error("Không đọc được PowerPoint (cần file .pptx).");
+  return { title: file.name.replace(/\.pptx$/i, ""), type: "text", chapters: chapters };
+}
+async function importImage(file){
+  var url = URL.createObjectURL(file);
+  var lang = $("ocrLang").value;
+  var text = await ocrImage(url, lang);
+  var book = { title: file.name.replace(/\.[^.]+$/, "") + " (ảnh OCR)", type: "text",
+    chapters: [{ title: "Trang ảnh", paras: text.split(/\n+/).map(function(s){ return s.trim(); }).filter(Boolean), page: 0 }] };
+  S.pendingPageImg = { bookTitle: book.title, img: url };
+  return book;
+}
+async function handleFiles(files){
+  for (var i = 0; i < files.length; i++){
+    var f = files[i], ext = (f.name.split(".").pop() || "").toLowerCase();
+    toast("Đang đọc file: " + f.name, 2500);
+    try {
+      var book = null;
+      if (ext === "pdf") book = await importPDF(f);
+      else if (ext === "docx") book = await importDOCX(f);
+      else if (ext === "epub") book = await importEPUB(f);
+      else if (ext === "xlsx" || ext === "xls") book = await importXLSX(f);
+      else if (ext === "pptx") book = await importPPTX(f);
+      else if (ext === "txt" || ext === "md" || ext === "csv" || ext === "tsv"){
+        var txt = await f.text();
+        if (ext === "csv" || ext === "tsv") txt = txt.split(/\n/).map(function(l){ return l.split(ext === "csv" ? "," : "\t").map(function(c){ return c.trim(); }).filter(Boolean).join(". "); }).join("\n");
+        book = { title: f.name.replace(/\.[^.]+$/, ""), type: "text", chapters: splitChaptersFromText(txt, f.name) };
+      }
+      else if (["png","jpg","jpeg","webp","gif"].indexOf(ext) >= 0) book = await importImage(f);
+      else if (["mp3","wav","m4a","ogg","opus"].indexOf(ext) >= 0){
+        book = { title: f.name.replace(/\.[^.]+$/, ""), type: "audio", chapters: [], audioUrl: URL.createObjectURL(f) };
+      }
+      else if (["doc","xls","ppt"].indexOf(ext) >= 0){
+        toast("File ." + ext + " là định dạng Office đời cũ mà trình duyệt không đọc trực tiếp được. Hãy mở bằng Word/Excel/PowerPoint rồi Lưu thành .docx/.xlsx/.pptx và thêm lại.", 7000);
+        continue;
+      }
+      else { toast("Chưa hỗ trợ định dạng ." + ext); continue; }
+      if (book){
+        if (S.pendingPageImg && book.title.indexOf(S.pendingPageImg.bookTitle) === 0){
+          if (!S.pageImgs[book.id || (book.id = uid())]) S.pageImgs[book.id] = {};
+          S.pageImgs[book.id][0] = S.pendingPageImg.img; S.pendingPageImg = null;
+        }
+        addBook(book);
+        if (book.needOcr && book.needOcr.length){
+          toast("PDF này có " + book.needOcr.length + " trang là ảnh scan chưa có chữ. Bấm nút OCR trong danh sách chương để nhận dạng chữ.", 7000);
+        }
+      }
+    } catch (e){ toast("Lỗi đọc " + f.name + ": " + e.message, 6000); }
+  }
+}
+
+/* ================= LIBRARY UI ================= */
+function renderLibrary(){
+  var host = $("libList"); host.innerHTML = "";
+  if (!S.books.length){ host.innerHTML = '<p class="muted small">Chưa có sách. Thêm file hoặc nạp văn bản mẫu để thử ngay.</p>'; return; }
+  S.folders.forEach(function(folder){
+    var items = S.books.filter(function(b){ return b.folder === folder; });
+    if (!items.length) return;
+    var wrap = document.createElement("div"); wrap.className = "folder";
+    var head = document.createElement("div"); head.className = "folder-head";
+    head.innerHTML = "<span>📁 " + esc(folder) + "</span>";
+    wrap.appendChild(head);
+    items.forEach(function(b){
+      var btn = document.createElement("button");
+      btn.className = "bookitem" + (b.id === S.cur ? " active" : "");
+      var meta = b.type === "youtube" ? "Video YouTube" : b.type === "audio" ? "File âm thanh" :
+        b.chapters.length + " chương · ~" + estMinutes(bookWords(b), 1) + " phút nghe";
+      btn.innerHTML = '<span class="t">' + esc(b.title) + '</span><span class="m">' + esc(meta) + "</span>";
+      btn.addEventListener("click", function(){ openBook(b.id); });
+      wrap.appendChild(btn);
+      var row = document.createElement("div"); row.style.cssText = "display:flex;gap:4px;margin:2px 0 6px";
+      var sel = document.createElement("select"); sel.className = "small"; sel.style.flex = "1";
+      S.folders.forEach(function(fd){ var o = document.createElement("option"); o.value = fd; o.textContent = fd; if (fd === b.folder) o.selected = true; sel.appendChild(o); });
+      sel.addEventListener("change", function(){ b.folder = sel.value; renderLibrary(); });
+      var del = document.createElement("button"); del.className = "btn small danger"; del.textContent = "Xoá";
+      del.addEventListener("click", function(){
+        stopAll();
+        S.books = S.books.filter(function(x){ return x.id !== b.id; });
+        delete S.ads[b.id]; delete S.proof[b.id];
+        if (S.cur === b.id){ S.cur = null; }
+        renderLibrary(); renderReader(); renderNotes(); renderLog();
+      });
+      row.appendChild(sel); row.appendChild(del); wrap.appendChild(row);
+      if (b.needOcr && b.needOcr.length){
+        var ocrBtn = document.createElement("button"); ocrBtn.className = "btn small primary"; ocrBtn.style.marginBottom = "8px";
+        ocrBtn.textContent = "OCR " + b.needOcr.length + " trang scan của sách này";
+        ocrBtn.addEventListener("click", function(){ runPdfOcr(b); });
+        wrap.appendChild(ocrBtn);
+      }
+    });
+    host.appendChild(wrap);
+  });
+}
+
+/* ================= READER ================= */
+function openBook(id){
+  stopAll();
+  S.cur = id; S.chapIdx = 0; S.sentIdx = 0;
+  var b = curBook(); if (!b) return;
+  S.mode = b.type === "youtube" ? "yt" : b.type === "audio" ? "audio" : "tts";
+  $("nowTitle").textContent = b.title;
+  var sel = $("chapSel"); sel.innerHTML = "";
+  b.chapters.forEach(function(ch, i){ var o = document.createElement("option"); o.value = i; o.textContent = ch.title; sel.appendChild(o); });
+  sel.value = "0";
+  $("bookMeta").textContent = b.type === "text"
+    ? b.chapters.length + " chương · " + bookWords(b).toLocaleString("vi-VN") + " từ · nghe hết ~" + estMinutes(bookWords(b), S.rate) + " phút ở tốc độ hiện tại"
+    : (b.type === "youtube" ? "Video YouTube — phát ngay trong trang, ghi chú gắn theo mốc giây." : "File âm thanh — nghe như một cuốn sách nói có sẵn.");
+  renderMedia(b);
+  renderReader(); renderLibrary(); renderAds(); renderProof(); renderChapList(); renderNotes();
+  refreshVoices();
+}
+function renderMedia(b){
+  var box = $("mediaBox");
+  box.innerHTML = ""; box.classList.add("hidden");
+  destroyYt();
+  if (b.type === "audio"){
+    box.classList.remove("hidden");
+    var au = document.createElement("audio");
+    au.controls = true; au.src = b.audioUrl; au.id = "audioEl";
+    au.addEventListener("ratechange", function(){ /* keep player rate in sync */ });
+    au.addEventListener("play", function(){ S.playing = true; updatePlayBtn(); setupMediaSession(b); });
+    au.addEventListener("pause", function(){ S.playing = false; updatePlayBtn(); });
+    box.appendChild(au); S.audioEl = au;
+  } else if (b.type === "youtube"){
+    box.classList.remove("hidden");
+    var wrap = document.createElement("div"); wrap.className = "ytwrap";
+    wrap.innerHTML = '<div id="ytplayer"></div>';
+    box.appendChild(wrap);
+    createYtPlayer(b.ytId);
+  }
+}
+function hiddenAdSet(bookId){
+  var set = {};
+  (S.ads[bookId] || []).forEach(function(a){ if (a.hidden) set[a.ci + ":" + a.pi] = true; });
+  return set;
+}
+function buildSentences(book, ci){
+  var list = [], hidden = hiddenAdSet(book.id);
+  var ch = book.chapters[ci]; if (!ch) return list;
+  ch.paras.forEach(function(p, pi){
+    if (hidden[ci + ":" + pi]) return;
+    splitSentences(p).forEach(function(s, si){ list.push({ ci: ci, pi: pi, si: si, text: s }); });
+  });
+  return list;
+}
+function renderReader(){
+  var r = $("reader"), b = curBook();
+  document.querySelectorAll(".reader").forEach(function(el){ el.style.fontSize = $("setSize").value + "px"; el.style.lineHeight = $("setLH").value; });
+  if (!b || b.type !== "text"){
+    r.innerHTML = '<p class="muted">' + (b ? "Mục này phát bằng khung nghe/xem ở trên. Ghi chú và các công cụ vẫn dùng được ở cột bên phải." : "Nội dung sách sẽ hiện ở đây. Thêm sách ở cột thư viện để bắt đầu.") + "</p>";
+    S.sents = []; return;
+  }
+  var ch = b.chapters[S.chapIdx]; if (!ch){ r.innerHTML = '<p class="muted">Chương trống.</p>'; S.sents = []; return; }
+  var hidden = hiddenAdSet(b.id);
+  var html = '<h1 class="chtitle">' + esc(ch.title) + "</h1>";
+  var chWords = ch.paras.join(" ").split(/\s+/).filter(Boolean).length;
+  html += '<div class="chmeta">~' + estMinutes(chWords, S.rate) + " phút nghe · " + ch.paras.length + " đoạn</div>";
+  S.sents = buildSentences(b, S.chapIdx);
+  var sIdx = 0;
+  ch.paras.forEach(function(p, pi){
+    var isAd = !!hidden[S.chapIdx + ":" + pi];
+    var isFlagged = (S.ads[b.id] || []).some(function(a){ return a.ci === S.chapIdx && a.pi === pi; });
+    html += '<p data-pi="' + pi + '"' + (isAd ? ' class="adpara"' : "") + ">";
+    if (isAd){
+      html += esc(p) + ' <span class="adtag">quảng cáo đã ẩn — không đọc</span>';
+    } else {
+      splitSentences(p).forEach(function(s){
+        html += '<span class="sent" data-si="' + sIdx + '">' + esc(s) + "</span> ";
+        sIdx++;
+      });
+    }
+    if (isFlagged && !isAd) html += '<span class="adtag">nghi quảng cáo — xem thẻ “Quảng cáo”</span>';
+    html += ' <button class="btn small ghost paraedit" data-edit="' + pi + '" title="Sửa đoạn này">✎ sửa</button></p>';
+  });
+  r.innerHTML = html;
+  Array.prototype.forEach.call(r.querySelectorAll(".sent"), function(el){
+    el.addEventListener("click", function(){
+      var i = parseInt(el.getAttribute("data-si"), 10);
+      playFrom(i);
+    });
+  });
+  Array.prototype.forEach.call(r.querySelectorAll("[data-edit]"), function(btn){
+    btn.addEventListener("click", function(){ editParagraph(parseInt(btn.getAttribute("data-edit"), 10)); });
+  });
+  highlightSent();
+}
+function editParagraph(pi){
+  var b = curBook(); if (!b) return;
+  var ch = b.chapters[S.chapIdx];
+  var old = ch.paras[pi];
+  var r = $("reader");
+  var p = r.querySelector('p[data-pi="' + pi + '"]'); if (!p) return;
+  p.innerHTML = "";
+  var ta = document.createElement("textarea"); ta.className = "txtin"; ta.value = old; ta.rows = Math.min(10, Math.max(3, Math.ceil(old.length / 70)));
+  var note = document.createElement("input"); note.className = "txtin"; note.placeholder = "Ghi chú: đã sửa/thêm gì ở đoạn này (không bắt buộc)"; note.style.cssText = "width:100%;margin-top:6px";
+  var save = document.createElement("button"); save.className = "btn small primary"; save.textContent = "Lưu — sách nói đọc theo bản mới"; save.style.marginTop = "6px";
+  var cancel = document.createElement("button"); cancel.className = "btn small ghost"; cancel.textContent = "Huỷ"; cancel.style.marginTop = "6px";
+  save.addEventListener("click", function(){
+    var wasPlaying = S.playing; stopAll();
+    ch.paras[pi] = ta.value;
+    logEdit(b.id, "Sửa đoạn", old, ta.value, note.value);
+    S.proof[b.id] = scanProof(b); S.ads[b.id] = scanAds(b);
+    renderReader(); renderProof(); renderAds();
+    toast("Đã lưu. Sách nói sẽ đọc theo nội dung mới.");
+    if (wasPlaying) playFrom(Math.min(S.sentIdx, S.sents.length - 1));
+  });
+  cancel.addEventListener("click", renderReader);
+  p.appendChild(ta); p.appendChild(note); p.appendChild(save); p.appendChild(cancel);
+  ta.focus();
+}
+function highlightSent(){
+  var r = $("reader");
+  Array.prototype.forEach.call(r.querySelectorAll(".sent"), function(el){ el.classList.remove("cur"); });
+  var el = r.querySelector('.sent[data-si="' + S.sentIdx + '"]');
+  if (el){ el.classList.add("cur"); el.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  var total = S.sents.length;
+  $("progBar").value = total ? Math.round((S.sentIdx) / total * 100) : 0;
+  $("progText").textContent = total ? ("Câu " + (S.sentIdx + 1) + " / " + total + " của chương · còn ~" +
+    estMinutes(S.sents.slice(S.sentIdx).map(function(s){ return s.text; }).join(" ").split(/\s+/).filter(Boolean).length, S.rate) + " phút") : "Chưa phát";
+}
+</script>
+
+<script>
+"use strict";
+/* ================= PLAYBACK (TTS) ================= */
+var synth = window.speechSynthesis || null;
+function refreshVoices(){
+  if (!synth) return;
+  S.voices = synth.getVoices();
+  var sel = $("setVoice"), b = curBook();
+  var want = b ? (b.lang || "vi") : "vi";
+  sel.innerHTML = "";
+  var auto = document.createElement("option"); auto.value = ""; auto.textContent = "Tự động theo ngôn ngữ sách"; sel.appendChild(auto);
+  S.voices.forEach(function(v, i){
+    var o = document.createElement("option"); o.value = i;
+    o.textContent = v.name + " (" + v.lang + ")"; sel.appendChild(o);
+  });
+  // preselect a matching voice for display only
+  var match = S.voices.findIndex(function(v){ return v.lang && v.lang.toLowerCase().indexOf(want) === 0; });
+  if (match >= 0 && !sel.value) sel.value = String(match);
+}
+if (synth) synth.onvoiceschanged = refreshVoices;
+function pickVoice(lang){
+  var selVal = $("setVoice").value;
+  var b = curBook();
+  var manual = S.voices[parseInt(selVal, 10)];
+  // if the user explicitly picked a voice whose lang matches book lang, honour it
+  if (manual && b && manual.lang && manual.lang.toLowerCase().indexOf((b.lang || "vi")) === 0) return manual;
+  var want = (b && b.lang) || lang || "vi";
+  return S.voices.find(function(v){ return v.lang && v.lang.toLowerCase().indexOf(want) === 0; }) ||
+         S.voices.find(function(v){ return v.lang && v.lang.toLowerCase().indexOf(want.split("-")[0]) === 0; }) || manual || null;
+}
+function speakCurrent(){
+  var b = curBook(); if (!b || !synth) return;
+  if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
+  var s = S.sents[S.sentIdx];
+  var u = new SpeechSynthesisUtterance(normalizeForSpeech(s.text, b.lang || "vi"));
+  u.rate = S.rate;
+  var v = pickVoice(b.lang); if (v){ u.voice = v; u.lang = v.lang; } else u.lang = (b.lang === "vi" ? "vi-VN" : b.lang);
+  u.onend = function(){ if (S.playing){ S.sentIdx++; if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); } else { highlightSent(); speakCurrent(); } } };
+  u.onerror = function(){ if (S.playing){ S.sentIdx++; highlightSent(); speakCurrent(); } };
+  synth.cancel(); synth.speak(u);
+  highlightSent();
+}
+function nextChapterOrStop(){
+  var b = curBook();
+  if (S.sleepEndChapter){ stopAll(); toast("Đã hết chương — hẹn giờ tắt kích hoạt."); return; }
+  if (b && S.chapIdx < b.chapters.length - 1){
+    S.chapIdx++; S.sentIdx = 0; $("chapSel").value = String(S.chapIdx);
+    renderReader(); speakCurrent(); toast("Chuyển sang: " + b.chapters[S.chapIdx].title);
+  } else { stopAll(); toast("Đã nghe hết sách."); }
+}
+function playFrom(i){
+  var b = curBook(); if (!b) { toast("Hãy thêm và mở một cuốn sách trước."); return; }
+  if (S.mode === "tts"){
+    if (!synth){ toast("Trình duyệt này không có giọng đọc (speechSynthesis). Hãy thử Chrome/Edge/Safari mới."); return; }
+    S.sentIdx = Math.max(0, Math.min(i || 0, S.sents.length - 1));
+    S.playing = true; updatePlayBtn(); speakCurrent(); setupMediaSession(b);
+  } else if (S.mode === "audio"){
+    if (S.audioEl){ S.audioEl.playbackRate = S.rate; S.audioEl.play(); }
+  } else if (S.mode === "yt"){
+    if (S.ytPlayer && S.ytPlayer.playVideo) S.ytPlayer.playVideo();
+  }
+}
+function pauseAll(){
+  S.playing = false; updatePlayBtn();
+  if (synth) synth.cancel();
+  if (S.audioEl) S.audioEl.pause();
+  if (S.ytPlayer && S.ytPlayer.pauseVideo) S.ytPlayer.pauseVideo();
+}
+function stopAll(){ pauseAll(); clearSleep(); }
+function updatePlayBtn(){ $("btnPlay").textContent = S.playing ? "⏸ Dừng" : "▶ Nghe"; }
+function skipSentences(delta){
+  // ~15s ≈ 38 words ≈ 3 sentences; 30s ≈ 6 sentences at 1x
+  var step = Math.max(1, Math.round(Math.abs(delta) / 5 * S.rate));
+  if (S.mode === "tts"){
+    var was = S.playing;
+    S.sentIdx = Math.max(0, Math.min(S.sents.length - 1, S.sentIdx + (delta > 0 ? step : -step)));
+    highlightSent(); if (was) speakCurrent();
+  } else if (S.mode === "audio" && S.audioEl){
+    S.audioEl.currentTime = Math.max(0, S.audioEl.currentTime + delta);
+  } else if (S.mode === "yt" && S.ytPlayer && S.ytPlayer.getCurrentTime){
+    S.ytPlayer.seekTo(Math.max(0, S.ytPlayer.getCurrentTime() + delta), true);
+  }
+}
+function clearSleep(){ if (S.sleepTimer){ clearTimeout(S.sleepTimer); S.sleepTimer = null; } S.sleepEndChapter = false; }
+function applySleep(){
+  clearSleep();
+  var v = $("setSleep").value;
+  if (v === "-1"){ S.sleepEndChapter = true; toast("Sẽ dừng khi hết chương hiện tại."); return; }
+  var mins = parseInt(v, 10);
+  if (mins > 0){
+    S.sleepTimer = setTimeout(function(){ pauseAll(); toast("Hẹn giờ tắt: đã dừng phát."); }, mins * 60000);
+    toast("Hẹn giờ tắt sau " + mins + " phút.");
+  }
+}
+/* ambient background sound: soft brown noise via WebAudio */
+function toggleAmbient(){
+  if (!S.ambCtx){
+    var AC = window.AudioContext || window.webkitAudioContext; if (!AC){ toast("Trình duyệt không hỗ trợ âm nền."); return; }
+    S.ambCtx = new AC();
+    var len = 2 * S.ambCtx.sampleRate, buf = S.ambCtx.createBuffer(1, len, S.ambCtx.sampleRate), d = buf.getChannelData(0), last = 0;
+    for (var i = 0; i < len; i++){ var w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
+    var src = S.ambCtx.createBufferSource(); src.buffer = buf; src.loop = true;
+    S.ambGain = S.ambCtx.createGain(); S.ambGain.gain.value = $("ambVol").value / 100 * 0.4;
+    src.connect(S.ambGain); S.ambGain.connect(S.ambCtx.destination); src.start();
+  }
+  S.ambOn = !S.ambOn;
+  if (S.ambOn){ S.ambCtx.resume(); S.ambGain.gain.value = $("ambVol").value / 100 * 0.4; }
+  else S.ambGain.gain.value = 0;
+  $("btnAmb").textContent = S.ambOn ? "Đang bật" : "Tắt";
+}
+/* Media Session: lock-screen controls */
+function setupMediaSession(b){
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: b.title, artist: "Đọc Sách Bằng Giọng Nói" });
+    navigator.mediaSession.setActionHandler("play", function(){ playFrom(S.sentIdx); });
+    navigator.mediaSession.setActionHandler("pause", pauseAll);
+    navigator.mediaSession.setActionHandler("seekbackward", function(){ skipSentences(-15); });
+    navigator.mediaSession.setActionHandler("seekforward", function(){ skipSentences(30); });
+    navigator.mediaSession.setActionHandler("previoustrack", function(){ skipSentences(-5); });
+    navigator.mediaSession.setActionHandler("nexttrack", function(){ skipSentences(5); });
+  } catch (e) {}
+}
+
+/* ================= YOUTUBE ================= */
+function ytIdFromUrl(url){
+  var m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/))([\w-]{6,})/);
+  return m ? m[1] : null;
+}
+var ytApiLoaded = false;
+function loadYtApi(cb){
+  if (window.YT && YT.Player){ cb(); return; }
+  if (!ytApiLoaded){
+    ytApiLoaded = true;
+    var tag = document.createElement("script"); tag.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(tag);
+  }
+  var iv = setInterval(function(){ if (window.YT && YT.Player){ clearInterval(iv); cb(); } }, 300);
+  setTimeout(function(){ clearInterval(iv); }, 12000);
+}
+function createYtPlayer(id){
+  loadYtApi(function(){
+    if (!document.getElementById("ytplayer")) return;
+    S.ytPlayer = new YT.Player("ytplayer", {
+      videoId: id,
+      playerVars: { rel: 0, playsinline: 1 },
+      events: {
+        onStateChange: function(e){
+          if (e.data === YT.PlayerState.PLAYING){ S.playing = true; if (S.ytPlayer.setPlaybackRate) S.ytPlayer.setPlaybackRate(S.rate); }
+          if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) S.playing = false;
+          updatePlayBtn();
+        }
+      }
+    });
+  });
+}
+function destroyYt(){ if (S.ytPlayer && S.ytPlayer.destroy){ try { S.ytPlayer.destroy(); } catch (e) {} } S.ytPlayer = null; }
+
+/* ================= ADS UI ================= */
+function renderAds(){
+  var b = curBook(), host = $("adsList"); host.innerHTML = "";
+  var list = b ? (S.ads[b.id] || []) : [];
+  $("adsCount").textContent = b ? (" — " + list.filter(function(a){ return a.hidden; }).length + " đã ẩn / " + list.length + " đoạn nghi quảng cáo") : "";
+  if (!b || b.type !== "text"){ host.innerHTML = '<p class="muted small">Mở một cuốn sách chữ để quét quảng cáo.</p>'; return; }
+  if (!list.length){ host.innerHTML = '<p class="muted small">Không thấy đoạn nào giống quảng cáo trong sách này.</p>'; return; }
+  list.forEach(function(a){
+    var div = document.createElement("div"); div.className = "item";
+    var head = document.createElement("div");
+    head.innerHTML = a.whys.map(function(w){ return '<span class="chip warn">' + esc(w) + "</span>"; }).join("") +
+      '<span class="muted small">Chương ' + (a.ci + 1) + ", đoạn " + (a.pi + 1) + (a.hidden ? " · ĐÃ ẨN" : "") + "</span>";
+    var ta = document.createElement("textarea"); ta.className = "txtin"; ta.value = a.text; ta.rows = 3;
+    var row = document.createElement("div"); row.className = "rowb";
+    var btnHide = document.createElement("button"); btnHide.className = "btn small" + (a.hidden ? "" : " primary");
+    btnHide.textContent = a.hidden ? "Đang ẩn — bấm để hiện lại" : "Ẩn (không đọc)";
+    btnHide.addEventListener("click", function(){
+      a.text = ta.value;
+      a.hidden = !a.hidden;
+      var ch = b.chapters[a.ci]; if (ch) ch.paras[a.pi] = ta.value;
+      logEdit(b.id, a.hidden ? "Ẩn quảng cáo" : "Hiện lại đoạn", a.text, a.hidden ? "(đã ẩn khỏi sách nói)" : "(đọc lại bình thường)", "");
+      renderAds(); renderReader();
+    });
+    var btnKeep = document.createElement("button"); btnKeep.className = "btn small"; btnKeep.textContent = "Giữ lại (không phải quảng cáo)";
+    btnKeep.addEventListener("click", function(){
+      S.ads[b.id] = list.filter(function(x){ return x.id !== a.id; });
+      renderAds(); renderReader();
+    });
+    var btnGo = document.createElement("button"); btnGo.className = "btn small ghost"; btnGo.textContent = "Tới đoạn này";
+    btnGo.addEventListener("click", function(){ goTo(a.ci, a.pi); });
+    row.appendChild(btnHide); row.appendChild(btnKeep); row.appendChild(btnGo);
+    div.appendChild(head); div.appendChild(ta); div.appendChild(row);
+    host.appendChild(div);
+  });
+}
+function goTo(ci, pi){
+  var b = curBook(); if (!b) return;
+  stopAll(); S.chapIdx = ci; $("chapSel").value = String(ci); renderReader();
+  var idx = S.sents.findIndex(function(s){ return s.pi === pi; });
+  if (idx >= 0){ S.sentIdx = idx; highlightSent(); }
+}
+
+/* ================= PROOFREAD UI ================= */
+function renderProof(){
+  var b = curBook(), host = $("proofList"); host.innerHTML = "";
+  var list = b ? (S.proof[b.id] || []) : [];
+  $("proofCount").textContent = b ? " — " + list.length + " chỗ nghi sai" : "";
+  if (!b || b.type !== "text"){ host.innerHTML = '<p class="muted small">Mở một cuốn sách chữ để soát lỗi.</p>'; return; }
+  if (!list.length){ host.innerHTML = '<p class="muted small">Chưa thấy chỗ nào nghi sai. Bạn vẫn sửa bất kỳ đoạn nào bằng nút ✎ ngay trong bài đọc.</p>'; return; }
+  list.slice(0, 60).forEach(function(f){
+    var div = document.createElement("div"); div.className = "item";
+    var imgs = S.pageImgs[b.id] || {};
+    var imgHtml = (f.page != null && imgs[f.page]) ? '<img class="pageimg" alt="Ảnh trang gốc để đối chiếu" src="' + imgs[f.page] + '" />' : "";
+    if (f.token){
+      div.innerHTML = '<div class="orig">“' + esc(f.token) + '”</div><div class="muted small">' + esc(f.why) + " · chương " + (f.ci + 1) + "</div>" + imgHtml;
+      var row = document.createElement("div"); row.className = "rowb";
+      var inp = document.createElement("input"); inp.className = "txtin"; inp.value = f.sug; inp.style.flex = "1";
+      inp.setAttribute("aria-label", "Nội dung sửa cho " + f.token);
+      var apply = function(){
+        var to = inp.value.trim(); if (!to || to === f.token) return;
+        var n = applyReplaceEverywhere(b, f.token, to);
+        logEdit(b.id, "Sửa chữ nghi sai", f.token, to, "Áp dụng cho " + n + " chỗ giống hệt");
+        S.proof[b.id] = scanProof(b); stopAll(); renderProof(); renderReader();
+        toast("Đã sửa " + n + " chỗ: " + f.token + " → " + to);
+      };
+      inp.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); apply(); } });
+      var btn = document.createElement("button"); btn.className = "btn small primary"; btn.textContent = "Nhận sửa (Enter)";
+      btn.addEventListener("click", apply);
+      var skip = document.createElement("button"); skip.className = "btn small ghost"; skip.textContent = "Bỏ qua";
+      skip.addEventListener("click", function(){ S.proof[b.id] = list.filter(function(x){ return x !== f; }); renderProof(); });
+      row.appendChild(inp); row.appendChild(btn); row.appendChild(skip);
+      div.appendChild(row);
+    } else {
+      div.innerHTML = '<div class="orig">Đoạn có thể thiếu/cụt dòng</div><div class="muted small">' + esc(f.why) + " · chương " + (f.ci + 1) + ", đoạn " + (f.pi + 1) + "</div>" +
+        '<p class="small">' + esc((f.paraText || "").slice(0, 240)) + "…</p>" + imgHtml;
+      var row2 = document.createElement("div"); row2.className = "rowb";
+      var bEdit = document.createElement("button"); bEdit.className = "btn small primary"; bEdit.textContent = "Mở đoạn để sửa";
+      bEdit.addEventListener("click", function(){ goTo(f.ci, f.pi); setTimeout(function(){ editParagraph(f.pi); }, 150); });
+      var bSkip = document.createElement("button"); bSkip.className = "btn small ghost"; bSkip.textContent = "Bỏ qua";
+      bSkip.addEventListener("click", function(){ S.proof[b.id] = list.filter(function(x){ return x !== f; }); renderProof(); });
+      row2.appendChild(bEdit); row2.appendChild(bSkip); div.appendChild(row2);
+    }
+    host.appendChild(div);
+  });
+}
+
+/* ================= PRONUNCIATION UI ================= */
+function renderPron(){
+  var host = $("pronList"); host.innerHTML = "";
+  var keys = Object.keys(S.pron);
+  if (!keys.length){ host.innerHTML = '<p class="muted small">Chưa có từ nào được dạy. Thêm ví dụ: NPK → “en nờ pê ca”, pH → “pê hát”, CEO → “xi i âu”.</p>'; return; }
+  keys.forEach(function(k){
+    var div = document.createElement("div"); div.className = "item";
+    div.innerHTML = '<b>' + esc(k) + "</b> → " + esc(S.pron[k]);
+    var row = document.createElement("div"); row.className = "rowb";
+    var t = document.createElement("button"); t.className = "btn small"; t.textContent = "Nghe thử";
+    t.addEventListener("click", function(){ testSpeak(k + " — đọc là: " + S.pron[k]); });
+    var d = document.createElement("button"); d.className = "btn small danger"; d.textContent = "Xoá";
+    d.addEventListener("click", function(){ delete S.pron[k]; renderPron(); });
+    row.appendChild(t); row.appendChild(d); div.appendChild(row); host.appendChild(div);
+  });
+}
+function testSpeak(text){
+  if (!synth){ toast("Trình duyệt không có giọng đọc."); return; }
+  var b = curBook();
+  var u = new SpeechSynthesisUtterance(normalizeForSpeech(text, "vi"));
+  u.rate = S.rate; var v = S.voices.find(function(x){ return x.lang && x.lang.toLowerCase().indexOf("vi") === 0; });
+  if (v){ u.voice = v; u.lang = v.lang; } else u.lang = "vi-VN";
+  synth.cancel(); synth.speak(u);
+}
+
+/* ================= CHAPTERS / NOTES / LOG ================= */
+function renderChapList(){
+  var b = curBook(), host = $("chapList"); host.innerHTML = "";
+  if (!b || b.type !== "text"){ host.innerHTML = '<p class="muted small">Chỉ áp dụng cho sách chữ.</p>'; return; }
+  var total = 0;
+  b.chapters.forEach(function(ch, i){
+    var w = ch.paras.join(" ").split(/\s+/).filter(Boolean).length; total += w;
+    var div = document.createElement("div"); div.className = "item";
+    div.innerHTML = "<b>" + esc(ch.title) + "</b> <span class='muted small'>~" + estMinutes(w, S.rate) + " phút · " + w.toLocaleString("vi-VN") + " từ</span>";
+    var btn = document.createElement("button"); btn.className = "btn small"; btn.textContent = "Nghe từ chương này"; btn.style.marginLeft = "8px";
+    btn.addEventListener("click", function(){ stopAll(); S.chapIdx = i; S.sentIdx = 0; $("chapSel").value = String(i); renderReader(); playFrom(0); });
+    div.appendChild(btn); host.appendChild(div);
+  });
+  var sum = document.createElement("p"); sum.className = "small";
+  sum.innerHTML = "Tổng cả sách: ~<b>" + estMinutes(total, S.rate) + " phút</b> ở tốc độ " + S.rate + "×";
+  host.appendChild(sum);
+}
+function currentPositionLabel(){
+  var b = curBook(); if (!b) return "";
+  if (b.type === "youtube" && S.ytPlayer && S.ytPlayer.getCurrentTime) return "giây " + Math.round(S.ytPlayer.getCurrentTime());
+  if (b.type === "audio" && S.audioEl) return "giây " + Math.round(S.audioEl.currentTime);
+  return "chương " + (S.chapIdx + 1) + ", câu " + (S.sentIdx + 1);
+}
+function renderNotes(){
+  var b = curBook(), host = $("notesList"); host.innerHTML = "";
+  var list = S.notes.filter(function(n){ return b && n.bookId === b.id; });
+  if (!b){ host.innerHTML = '<p class="muted small">Mở một cuốn sách để ghi chú.</p>'; return; }
+  if (!list.length){ host.innerHTML = '<p class="muted small">Chưa có ghi chú cho sách này.</p>'; return; }
+  list.forEach(function(n){
+    var div = document.createElement("div"); div.className = "item";
+    div.innerHTML = '<div class="muted small">' + esc(n.posLabel) + "</div><div>" + esc(n.text) + "</div>";
+    var row = document.createElement("div"); row.className = "rowb";
+    var go = document.createElement("button"); go.className = "btn small"; go.textContent = "Nhảy tới chỗ này";
+    go.addEventListener("click", function(){
+      if (b.type === "youtube" && S.ytPlayer && n.ytTime != null) S.ytPlayer.seekTo(n.ytTime, true);
+      else if (b.type === "audio" && S.audioEl && n.ytTime != null) S.audioEl.currentTime = n.ytTime;
+      else if (n.ci != null){ stopAll(); S.chapIdx = n.ci; $("chapSel").value = String(n.ci); renderReader(); S.sentIdx = n.si || 0; highlightSent(); }
+    });
+    var del = document.createElement("button"); del.className = "btn small danger"; del.textContent = "Xoá";
+    del.addEventListener("click", function(){ S.notes = S.notes.filter(function(x){ return x.id !== n.id; }); renderNotes(); });
+    row.appendChild(go); row.appendChild(del); div.appendChild(row); host.appendChild(div);
+  });
+}
+function renderLog(){
+  var b = curBook(), host = $("logList"); host.innerHTML = "";
+  var list = S.log.filter(function(l){ return !b || l.bookId === b.id; });
+  if (!list.length){ host.innerHTML = '<p class="muted small">Chưa có lần sửa nào.</p>'; return; }
+  list.forEach(function(l){
+    var div = document.createElement("div"); div.className = "item";
+    div.innerHTML = '<div><span class="chip">' + esc(l.kind) + '</span><span class="muted small">' + esc(l.time) + "</span></div>" +
+      '<div class="small">Trước: ' + esc(l.before || "—") + "</div>" +
+      '<div class="small">Sau: <b>' + esc(l.after || "—") + "</b></div>";
+    var inp = document.createElement("input"); inp.className = "txtin"; inp.placeholder = "Ghi chú cho lần sửa này…"; inp.value = l.note || ""; inp.style.cssText = "width:100%;margin-top:6px";
+    inp.addEventListener("change", function(){ l.note = inp.value; });
+    div.appendChild(inp); host.appendChild(div);
+  });
+}
+
+/* ================= TRANSLATION (keeps structure) ================= */
+function chunkText(s, max){
+  var out = [], rest = s;
+  while (rest.length > max){
+    var cut = rest.lastIndexOf(". ", max); if (cut < 80) cut = rest.lastIndexOf(" ", max); if (cut < 40) cut = max;
+    out.push(rest.slice(0, cut + 1)); rest = rest.slice(cut + 1);
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+async function translateText(text, src, tgt){
+  var chunks = chunkText(text, 450), done = [];
+  for (var i = 0; i < chunks.length; i++){
+    var url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(chunks[i]) + "&langpair=" + encodeURIComponent(src + "|" + tgt);
+    var res = await fetch(url);
+    if (!res.ok) throw new Error("Dịch vụ dịch trả lỗi " + res.status);
+    var data = await res.json();
+    var out = data && data.responseData && data.responseData.translatedText;
+    if (!out) throw new Error("Không nhận được bản dịch.");
+    done.push(out);
+  }
+  return done.join(" ");
+}
+async function runTranslate(onlyChapter){
+  var b = curBook(); if (!b || b.type !== "text"){ toast("Hãy mở một cuốn sách chữ để dịch."); return; }
+  var tgt = $("transLang").value, src = b.lang || "vi";
+  if (src === tgt){ toast("Ngôn ngữ đích trùng ngôn ngữ gốc."); return; }
+  var chapters = onlyChapter ? [b.chapters[S.chapIdx]] : b.chapters;
+  var newChapters = [];
+  var totalParas = chapters.reduce(function(a, c){ return a + c.paras.length; }, 0), doneParas = 0;
+  try {
+    for (var ci = 0; ci < chapters.length; ci++){
+      var ch = chapters[ci], newParas = [];
+      var newTitle = ch.title;
+      try { newTitle = await translateText(ch.title, src, tgt); } catch (e) {}
+      for (var pi = 0; pi < ch.paras.length; pi++){
+        newParas.push(await translateText(ch.paras[pi], src, tgt));
+        doneParas++;
+        $("transProg").textContent = "Đang dịch… đoạn " + doneParas + " / " + totalParas + " (giữ nguyên cấu trúc chương/đoạn).";
+      }
+      newChapters.push({ title: newTitle, paras: newParas });
+    }
+    var nb = { title: b.title + " — bản dịch " + $("transLang").selectedOptions[0].textContent + (onlyChapter ? " (chương " + (S.chapIdx + 1) + ")" : ""),
+      type: "text", chapters: newChapters, lang: tgt, folder: b.folder };
+    addBook(nb);
+    $("transProg").textContent = "Dịch xong — bản dịch đã thành một cuốn riêng trong thư viện, cấu trúc y hệt bản gốc.";
+  } catch (e){
+    $("transProg").textContent = "Dịch bị gián đoạn: " + e.message + ". Dịch vụ miễn phí có giới hạn mỗi ngày — thử lại sau hoặc dịch từng chương.";
+  }
+}
+
+/* ================= EXPORT ================= */
+function exportClean(){
+  var b = curBook(); if (!b || b.type !== "text"){ toast("Mở một cuốn sách chữ để xuất văn bản sạch."); return; }
+  var hidden = hiddenAdSet(b.id), out = [b.title, ""];
+  b.chapters.forEach(function(ch, ci){
+    out.push("", ch.title, "");
+    ch.paras.forEach(function(p, pi){ if (!hidden[ci + ":" + pi]) out.push(p, ""); });
+  });
+  var blob = new Blob([out.join("\n")], { type: "text/plain;charset=utf-8" });
+  var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = b.title.replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/\s+/g, "-") + "-sach.txt";
+  document.body.appendChild(a); a.click(); a.remove();
+  toast("Đã tải văn bản sạch (đã bỏ quảng cáo đã ẩn) — dùng được cho OneDrive, YouTube mô tả, hoặc NotebookLM.");
+}
+</script>
+
+<script>
+"use strict";
+/* ================= WIRING ================= */
+function switchTab(name){
+  Array.prototype.forEach.call($("toolTabs").children, function(btn){ btn.classList.toggle("on", btn.getAttribute("data-tab") === name); });
+  ["ads","proof","pron","chap","trans","notes","log"].forEach(function(t){ $("tab-" + t).classList.toggle("hidden", t !== name); });
+  if (name === "chap") renderChapList();
+  if (name === "pron") renderPron();
+  if (name === "notes") renderNotes();
+  if (name === "log") renderLog();
+}
+Array.prototype.forEach.call($("toolTabs").children, function(btn){
+  btn.addEventListener("click", function(){ switchTab(btn.getAttribute("data-tab")); });
+});
+$("btnPick").addEventListener("click", function(){ $("fileInput").click(); });
+$("btnAddTop").addEventListener("click", function(){ $("fileInput").click(); });
+$("fileInput").addEventListener("change", function(){ handleFiles(this.files); this.value = ""; });
+var dz = $("dropzone");
+["dragover","dragenter"].forEach(function(ev){ dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.add("over"); }); });
+["dragleave","drop"].forEach(function(ev){ dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.remove("over"); }); });
+dz.addEventListener("drop", function(e){ handleFiles(e.dataTransfer.files); });
+$("btnLib").addEventListener("click", function(){
+  $("libPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+$("btnPaste").addEventListener("click", function(){
+  var txt = $("pasteText").value.trim(); if (!txt){ toast("Hãy dán nội dung sách trước."); return; }
+  var title = $("pasteTitle").value.trim() || "Sách dán từ văn bản";
+  addBook({ title: title, type: "text", chapters: splitChaptersFromText(txt, title) });
+  $("pasteText").value = ""; $("pasteTitle").value = "";
+});
+$("btnSample").addEventListener("click", function(){
+  var sample = [
+    "Chương 1: Vì sao nên nghe sách",
+    "Nghe sách giúp bạn tận dụng thời gian đi đường, nấu ăn hay tập thể dục. Một cuốn sách 300 trang tương đương khoảng 10 giờ nghe ở tốc độ thường.",
+    "Ngày 07/11/2026, giá một cuốn sách nói là 250.000đ. Diện tích phòng đọc là 25 m². Chương IV của cuốn sách này sẽ nói về thói quen đọc.",
+    "Mẹo nhỏ: bón phân NPK đúng liều, giữ độ pH của đất quanh mức 6,5 và tưới 2 lít nước mỗi ngày cho chậu nhỏ. Mua ngay hôm nay tại www.vidu-quang-cao.example.com hoặc gọi hotline 0901 234 567 để được giảm giá 50%!",
+    "Chương 2: Đọc đều mỗi ngày",
+    "Chỉ cần 20 phút mỗi ngày, sau một tháng bạn đã nghe xong một cuốn sách vừa. Não bộ ghi nhớ tốt hơn khi bạn vừa nghe vừa nhìn theo câu chữ đang được tô sáng.",
+    "Từ c0ng việc đến học tập, thói quen nhỏ lặp lại hằng ngày tạo nên khác biệt lớn theo thời gian."
+  ].join("\n");
+  addBook({ title: "Văn bản mẫu để thử (có sẵn 1 đoạn quảng cáo + 1 lỗi OCR để bạn thử lọc)", type: "text", chapters: splitChaptersFromText(sample, "Văn bản mẫu") });
+});
+$("btnYt").addEventListener("click", function(){
+  var url = $("ytUrl").value.trim(), id = ytIdFromUrl(url);
+  if (!id){ toast("Link YouTube chưa đúng. Hãy dán link dạng youtube.com/watch?v=… hoặc youtu.be/…"); return; }
+  addBook({ title: "Video YouTube " + id, type: "youtube", chapters: [], ytId: id, lang: "vi" });
+  $("ytUrl").value = "";
+});
+$("btnFolder").addEventListener("click", function(){
+  var name = $("newFolder").value.trim(); if (!name) return;
+  if (S.folders.indexOf(name) < 0) S.folders.push(name);
+  $("newFolder").value = ""; renderLibrary(); toast("Đã tạo thư mục: " + name);
+});
+$("chapSel").addEventListener("change", function(){
+  stopAll(); S.chapIdx = parseInt(this.value, 10); S.sentIdx = 0; renderReader();
+});
+$("btnPrevCh").addEventListener("click", function(){ if (S.chapIdx > 0){ stopAll(); S.chapIdx--; S.sentIdx = 0; $("chapSel").value = String(S.chapIdx); renderReader(); } });
+$("btnNextCh").addEventListener("click", function(){ var b = curBook(); if (b && S.chapIdx < b.chapters.length - 1){ stopAll(); S.chapIdx++; S.sentIdx = 0; $("chapSel").value = String(S.chapIdx); renderReader(); } });
+
+$("btnPlay").addEventListener("click", function(){
+  if (S.playing) pauseAll(); else playFrom(S.sentIdx);
+});
+$("btnPrevSent").addEventListener("click", function(){ skipSentences(-5); });
+$("btnNextSent").addEventListener("click", function(){ skipSentences(5); });
+$("btnBack15").addEventListener("click", function(){ skipSentences(-15); });
+$("btnFwd30").addEventListener("click", function(){ skipSentences(30); });
+$("btnMore").addEventListener("click", function(){
+  var p = document.querySelector(".player");
+  p.classList.toggle("open");
+  this.textContent = p.classList.contains("open") ? "✕" : "⚙";
+});
+$("setRate").addEventListener("change", function(){
+  S.rate = parseFloat(this.value);
+  if (S.mode === "audio" && S.audioEl) S.audioEl.playbackRate = S.rate;
+  if (S.mode === "yt" && S.ytPlayer && S.ytPlayer.setPlaybackRate) S.ytPlayer.setPlaybackRate(S.rate);
+  if (S.mode === "tts" && S.playing) speakCurrent();
+  var b = curBook();
+  if (b && b.type === "text") $("bookMeta").textContent = b.chapters.length + " chương · " + bookWords(b).toLocaleString("vi-VN") + " từ · nghe hết ~" + estMinutes(bookWords(b), S.rate) + " phút ở tốc độ hiện tại";
+  renderChapList();
+});
+$("setVoice").addEventListener("change", function(){ if (S.mode === "tts" && S.playing) speakCurrent(); });
+$("setSleep").addEventListener("change", applySleep);
+$("btnAmb").addEventListener("click", toggleAmbient);
+$("ambVol").addEventListener("input", function(){ if (S.ambGain && S.ambOn) S.ambGain.gain.value = this.value / 100 * 0.4; });
+
+$("setFont").addEventListener("change", function(){ $("reader").className = $("reader").className.replace(/font-\w+/, "font-" + this.value); });
+$("setSize").addEventListener("input", function(){ $("fsVal").textContent = this.value; $("reader").style.fontSize = this.value + "px"; });
+$("setLH").addEventListener("input", function(){ $("lhVal").textContent = this.value; $("reader").style.lineHeight = this.value; });
+Array.prototype.forEach.call(document.querySelectorAll(".themeBtn"), function(btn){
+  btn.addEventListener("click", function(){
+    var r = $("reader");
+    r.className = r.className.replace(/theme-[\w-]+/, "theme-" + btn.getAttribute("data-th"));
+  });
+});
+$("uiBig").addEventListener("change", function(){ document.body.classList.toggle("big-ui", this.checked); });
+
+$("btnScanAds").addEventListener("click", function(){ var b = curBook(); if (b){ S.ads[b.id] = scanAds(b); renderAds(); renderReader(); toast("Đã quét lại quảng cáo."); } });
+$("btnScanProof").addEventListener("click", function(){ var b = curBook(); if (b){ S.proof[b.id] = scanProof(b); renderProof(); toast("Đã quét lại các chỗ nghi sai."); } });
+
+$("btnPronAdd").addEventListener("click", function(){
+  var from = $("pronFrom").value.trim(), to = $("pronTo").value.trim();
+  if (!from || !to){ toast("Nhập cả từ viết tắt và cách đọc."); return; }
+  var existed = S.pron[from];
+  S.pron[from] = to;
+  var b = curBook();
+  logEdit(b ? b.id : "", "Từ điển phát âm", existed ? from + " → " + existed : from, from + " → " + to, "");
+  renderPron(); toast("Đã lưu: " + from + " đọc là “" + to + "”. Cách đọc này áp dụng ngay cho sách nói.");
+  $("pronFrom").value = ""; $("pronTo").value = "";
+});
+$("btnPronTest").addEventListener("click", function(){ testSpeak($("pronTestText").value); });
+
+$("btnTransChap").addEventListener("click", function(){ runTranslate(true); });
+$("btnTransAll").addEventListener("click", function(){ runTranslate(false); });
+
+$("btnNoteAdd").addEventListener("click", function(){
+  var b = curBook(); if (!b){ toast("Mở một cuốn sách trước khi ghi chú."); return; }
+  var txt = $("noteText").value.trim(); if (!txt){ toast("Hãy viết nội dung ghi chú."); return; }
+  var n = { id: uid(), bookId: b.id, text: txt, posLabel: b.title + " · " + currentPositionLabel(), ci: S.chapIdx, si: S.sentIdx, ytTime: null };
+  if (b.type === "youtube" && S.ytPlayer && S.ytPlayer.getCurrentTime) n.ytTime = S.ytPlayer.getCurrentTime();
+  if (b.type === "audio" && S.audioEl) n.ytTime = S.audioEl.currentTime;
+  S.notes.unshift(n); $("noteText").value = ""; renderNotes(); toast("Đã lưu ghi chú tại " + n.posLabel + ".");
+});
+$("btnExport").addEventListener("click", exportClean);
+
+/* PWA-ish install */
+window.addEventListener("beforeinstallprompt", function(e){
+  e.preventDefault(); S.deferredInstall = e; $("installCard").classList.remove("hidden");
+});
+$("btnInstall").addEventListener("click", function(){ $("installCard").classList.remove("hidden"); });
+$("btnHideInstall").addEventListener("click", function(){ $("installCard").classList.add("hidden"); });
+$("btnDoInstall").addEventListener("click", async function(){
+  var evt = S.deferredInstall;
+  if (evt){
+    S.deferredInstall = null;
+    var showInstallDialog = evt.prompt.bind(evt);
+    await showInstallDialog();
+    var r = await evt.userChoice;
+    toast(r.outcome === "accepted" ? "Đã cài — biểu tượng web sẽ xuất hiện ngoài màn hình như một ứng dụng." : "Bạn đã hoãn cài đặt.");
+    $("installCard").classList.add("hidden");
+  } else {
+    $("installText").textContent = "Ngay trong khung ứng dụng này, trình duyệt không cho cài một chạm. Hãy mở trang này bằng Chrome (Android) hoặc Safari (iPhone) rồi chọn “Cài ứng dụng / Thêm vào Màn hình chính” — biểu tượng sẽ nằm ngoài màn hình và mở ra cửa sổ riêng như ứng dụng thật.";
+  }
+});
+
+/* keep TTS alive on some browsers that pause long utterances */
+setInterval(function(){ if (synth && S.playing && S.mode === "tts" && !synth.speaking){ /* safety net */ } }, 5000);
+
+renderLibrary(); renderReader(); renderPron(); renderLog(); renderNotes();
+if (synth) refreshVoices();
+</script>
+  </body>
+</html>
