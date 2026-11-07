@@ -325,7 +325,7 @@
         <div class="pset"><label class="lbl" style="margin:0">Tốc độ</label>
           <select id="setRate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select></div>
         <div class="pset"><label class="lbl" style="margin:0">Giọng đọc</label>
-          <select id="setVoice" style="max-width:190px"></select></div>
+          <div style="padding:2px 0;font-weight:600">Google Dịch</div></div>
         <div class="pset"><label class="lbl" style="margin:0">Hẹn giờ tắt</label>
           <select id="setSleep"><option value="0">Không hẹn</option><option value="5">5 phút</option><option value="10">10 phút</option><option value="15">15 phút</option><option value="30">30 phút</option><option value="60">60 phút</option><option value="-1">Hết chương</option></select></div>
         <div class="pset"><label class="lbl" style="margin:0">Âm nền</label>
@@ -352,7 +352,7 @@ var S = {
   pron: {}, log: [], notes: [], voices: [],
   ads: {}, proof: {}, pageImgs: {}, // per bookId
   ytPlayer: null, ytReady: false, audioEl: null, ambOn: false, ambGain: null, ambCtx: null,
-  deferredInstall: null
+  deferredInstall: null, ttsEngine: "google", testAudio: null
 };
 var $ = function (id) { return document.getElementById(id); };
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
@@ -986,26 +986,14 @@ function highlightSent(){
 "use strict";
 /* ================= PLAYBACK (TTS) ================= */
 var synth = window.speechSynthesis || null;
+/* No voice picker anywhere: the page reads with the single Google Translate voice (engine below).
+   Device voices are only cached as a silent fallback if that one voice cannot be loaded. */
 function refreshVoices(){
   if (!synth) return;
   S.voices = synth.getVoices();
-  var sel = $("setVoice"), b = curBook();
-  var want = b ? (b.lang || "vi") : "vi";
-  sel.innerHTML = "";
-  var auto = document.createElement("option"); auto.value = ""; auto.textContent = "Tự động theo ngôn ngữ sách"; sel.appendChild(auto);
-  S.voices.forEach(function(v, i){
-    var o = document.createElement("option"); o.value = i;
-    o.textContent = v.name + " (" + v.lang + ")"; sel.appendChild(o);
-  });
-  // preselect the best-quality matching voice in the list (display only; auto mode uses the same scoring)
-  if (sel.getAttribute("data-manual") !== "1"){
-    var best = -1, bs = -1;
-    S.voices.forEach(function(v, i){ var sc = voiceScore(v, want); if (sc > bs){ bs = sc; best = i; } });
-    if (best >= 0) sel.value = String(best);
-  }
 }
 if (synth) synth.onvoiceschanged = refreshVoices;
-/* Score voices so the default is the most natural one available (Google / Natural / Neural / Premium first, compact last) */
+/* Fallback only: score device voices so the single fallback voice is the most natural one available */
 function voiceScore(v, want){
   if (!v || !v.lang) return -1;
   var vl = v.lang.toLowerCase().replace(/_/g, "-"), w = String(want || "vi").toLowerCase();
@@ -1022,20 +1010,116 @@ function voiceScore(v, want){
   return s;
 }
 function pickVoice(lang){
-  var sel = $("setVoice"), b = curBook();
-  if (sel.getAttribute("data-manual") === "1"){
-    var mv = S.voices[parseInt(sel.value, 10)];
-    if (mv) return mv;
-  }
+  var b = curBook();
   var want = (b && b.lang) || lang || "vi";
   var best = null, bs = -1;
   S.voices.forEach(function(v){ var sc = voiceScore(v, want); if (sc > bs){ bs = sc; best = v; } });
   return best;
 }
-/* Speech is fed to the engine in multi-sentence chunks (one utterance per chunk) so the voice keeps
-   natural intonation across sentences instead of restarting flat at every sentence. A generation
-   counter invalidates events from cancelled utterances, which previously advanced the sentence
-   counter a second time and made playback skip sentences. */
+/* ================= THE ONE VOICE: GOOGLE TRANSLATE =================
+   Playback uses the Google Translate speech endpoint — the same voice as the "listen" button in
+   Google Translate — so the reading sounds exactly like Google Dịch, with ONE fixed voice and no
+   voice list anywhere. The endpoint accepts ~200 characters per request, so each sentence is cut
+   into clause-sized pieces (<=180 chars) played back-to-back on a single <audio> element; the next
+   piece is prefetched while the current one plays so the reading stays continuous. Only if the
+   Google voice cannot be loaded at all (network blocked) does playback fall back ONCE to the single
+   best device voice — still no picker — and a toast says so. */
+function gtLang(lang){
+  var l = String(lang || "vi").toLowerCase();
+  if (l.indexOf("zh") === 0) return "zh-CN";
+  var m = l.match(/^(vi|en|fr|de|es|ja|ko|ru)/);
+  return m ? m[1] : "vi";
+}
+function gtUrl(text, lang){
+  return "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" +
+    encodeURIComponent(gtLang(lang)) + "&q=" + encodeURIComponent(text);
+}
+function googleSegments(sent, lang){
+  var t = normalizeForSpeech(sent.text, lang);
+  if (!t) return [];
+  var segs = [], rest = t;
+  while (rest.length > 180){
+    var cut = Math.max(rest.lastIndexOf("; ", 180), rest.lastIndexOf(", ", 180), rest.lastIndexOf(": ", 180));
+    if (cut < 60) cut = rest.lastIndexOf(" ", 180);
+    if (cut < 40) cut = 180;
+    segs.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) segs.push(rest);
+  return segs.filter(Boolean);
+}
+var ttsAudio = null;
+var G = { gen: 0, segs: [], si: 0, sentIdx: -1, hasAudio: false, pre: null };
+function ensureTtsAudio(){
+  if (!ttsAudio){
+    ttsAudio = new Audio();
+    ttsAudio.preload = "auto";
+    ttsAudio.addEventListener("ended", function(){
+      if (!S.playing || !G.hasAudio || S.ttsEngine !== "google") return;
+      G.si++;
+      if (G.si < G.segs.length){ playGoogleSeg(); return; }
+      G.hasAudio = false;
+      S.sentIdx = G.sentIdx + 1;
+      if (S.sentIdx >= S.sents.length) nextChapterOrStop();
+      else speakCurrent();
+    });
+    ttsAudio.addEventListener("error", function(){
+      if (!S.playing || !G.hasAudio || S.ttsEngine !== "google") return;
+      googleVoiceFailed();
+    });
+  }
+  return ttsAudio;
+}
+function playGoogleSeg(){
+  var b = curBook(); if (!b) return;
+  var a = ensureTtsAudio(), gen = G.gen;
+  if ("preservesPitch" in a) a.preservesPitch = true;
+  a.playbackRate = S.rate;
+  a.src = gtUrl(G.segs[G.si], b.lang || "vi");
+  var p = a.play();
+  if (p && p.catch) p.catch(function(){ if (gen === G.gen && S.playing && G.hasAudio) googleVoiceFailed(); });
+  prefetchGoogleNext();
+}
+function prefetchGoogleNext(){
+  var b = curBook(); if (!b) return;
+  var url = null;
+  if (G.si + 1 < G.segs.length) url = gtUrl(G.segs[G.si + 1], b.lang || "vi");
+  else if (G.sentIdx + 1 < S.sents.length){
+    var ns = googleSegments(S.sents[G.sentIdx + 1], b.lang || "vi");
+    if (ns.length) url = gtUrl(ns[0], b.lang || "vi");
+  }
+  if (url){ var pre = new Audio(); pre.preload = "auto"; pre.src = url; G.pre = pre; }
+}
+function speakGoogle(){
+  var b = curBook(); if (!b) return;
+  if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
+  var segs = googleSegments(S.sents[S.sentIdx], b.lang || "vi");
+  if (!segs.length){ S.sentIdx++; speakGoogle(); return; }
+  G.gen++; G.segs = segs; G.si = 0; G.sentIdx = S.sentIdx; G.hasAudio = true;
+  playGoogleSeg();
+  highlightSent();
+}
+function haltGoogleAudio(){
+  G.gen++; G.hasAudio = false;
+  if (ttsAudio){ ttsAudio.pause(); ttsAudio.removeAttribute("src"); try { ttsAudio.load(); } catch (e) {} }
+}
+function googleVoiceFailed(){
+  if (S.ttsEngine !== "google") return;
+  S.ttsEngine = "webspeech";
+  haltGoogleAudio();
+  if (!synth){
+    S.playing = false; updatePlayBtn();
+    toast("Không tải được giọng Google Dịch và trình duyệt cũng không có giọng dự phòng. Hãy kiểm tra mạng rồi bấm Nghe lại.", 6000);
+    return;
+  }
+  toast("Không tải được giọng Google Dịch (mạng?) — tạm đọc bằng giọng có sẵn trong máy.", 5000);
+  if (S.playing) speakCurrent();
+}
+function stopTestClip(){ if (S.testAudio){ try { S.testAudio.pause(); } catch (e) {} S.testAudio = null; } }
+/* Fallback engine only (device speechSynthesis): speech is fed in multi-sentence chunks (one
+   utterance per chunk) so the voice keeps natural intonation across sentences instead of restarting
+   flat at every sentence. A generation counter invalidates events from cancelled utterances, which
+   previously advanced the sentence counter a second time and made playback skip sentences. */
 var speakGen = 0;
 function sentenceSegments(sent, lang){
   var t = normalizeForSpeech(sent.text, lang);
@@ -1072,6 +1156,10 @@ function buildChunk(fromIdx){
   return parts.length ? { parts: parts, text: text, lastIdx: parts[parts.length - 1].idx } : null;
 }
 function speakCurrent(){
+  if (S.ttsEngine === "google"){ speakGoogle(); return; }
+  speakWebSpeech();
+}
+function speakWebSpeech(){
   var b = curBook(); if (!b || !synth) return;
   if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
   var chunk = buildChunk(S.sentIdx);
@@ -1105,6 +1193,7 @@ function speakCurrent(){
   highlightSent();
 }
 function restartSpeech(){
+  if (S.ttsEngine === "google"){ haltGoogleAudio(); speakCurrent(); return; }
   if (!synth) return;
   speakGen++;
   synth.cancel();
@@ -1121,7 +1210,16 @@ function nextChapterOrStop(){
 function playFrom(i){
   var b = curBook(); if (!b) { toast("Hãy thêm và mở một cuốn sách trước."); return; }
   if (S.mode === "tts"){
-    if (!synth){ toast("Trình duyệt này không có giọng đọc (speechSynthesis). Hãy thử Chrome/Edge/Safari mới."); return; }
+    stopTestClip();
+    // paused mid-sentence with the Google voice: resume exactly where it stopped
+    if (S.ttsEngine === "google" && ttsAudio && G.hasAudio && G.sentIdx === (i || 0) && ttsAudio.paused && !ttsAudio.ended){
+      S.playing = true; updatePlayBtn();
+      ttsAudio.playbackRate = S.rate;
+      var rp = ttsAudio.play();
+      if (rp && rp.catch) rp.catch(function(){ googleVoiceFailed(); });
+      setupMediaSession(b);
+      return;
+    }
     S.sentIdx = Math.max(0, Math.min(i || 0, S.sents.length - 1));
     S.playing = true; updatePlayBtn(); restartSpeech(); setupMediaSession(b);
   } else if (S.mode === "audio"){
@@ -1134,10 +1232,11 @@ function pauseAll(){
   speakGen++; // invalidate pending utterance events before cancelling
   S.playing = false; updatePlayBtn();
   if (synth) synth.cancel();
+  if (ttsAudio) ttsAudio.pause();
   if (S.audioEl) S.audioEl.pause();
   if (S.ytPlayer && S.ytPlayer.pauseVideo) S.ytPlayer.pauseVideo();
 }
-function stopAll(){ pauseAll(); clearSleep(); }
+function stopAll(){ pauseAll(); haltGoogleAudio(); clearSleep(); }
 function updatePlayBtn(){ $("btnPlay").textContent = S.playing ? "⏸ Dừng" : "▶ Nghe"; }
 function skipSentences(delta){
   // ~15s ≈ 38 words ≈ 3 sentences; 30s ≈ 6 sentences at 1x
@@ -1329,14 +1428,25 @@ function renderPron(){
   });
 }
 function testSpeak(text){
-  if (!synth){ toast("Trình duyệt không có giọng đọc."); return; }
   if (S.playing) pauseAll();
-  var u = new SpeechSynthesisUtterance(normalizeForSpeech(text, "vi"));
-  u.rate = S.rate;
-  var v = null, bs = -1;
-  S.voices.forEach(function(x){ var sc = voiceScore(x, "vi"); if (sc > bs){ bs = sc; v = x; } });
-  if (v){ u.voice = v; u.lang = v.lang; } else u.lang = "vi-VN";
-  synth.cancel(); synth.speak(u);
+  var t = normalizeForSpeech(text, "vi");
+  if (t.length > 190) t = t.slice(0, 190);
+  stopTestClip();
+  var a = new Audio(gtUrl(t, "vi"));
+  S.testAudio = a;
+  a.playbackRate = S.rate;
+  var fellBack = false;
+  function fb(){
+    if (fellBack) return; fellBack = true;
+    if (!synth){ toast("Không tải được giọng Google Dịch — hãy kiểm tra mạng."); return; }
+    var u = new SpeechSynthesisUtterance(t);
+    u.rate = S.rate;
+    var v = pickVoice("vi"); if (v){ u.voice = v; u.lang = v.lang; } else u.lang = "vi-VN";
+    synth.cancel(); synth.speak(u);
+  }
+  a.addEventListener("error", fb);
+  var p = a.play();
+  if (p && p.catch) p.catch(fb);
 }
 
 /* ================= CHAPTERS / NOTES / LOG ================= */
@@ -1538,15 +1648,12 @@ $("btnMore").addEventListener("click", function(){
 $("setRate").addEventListener("change", function(){
   S.rate = parseFloat(this.value);
   if (S.mode === "audio" && S.audioEl) S.audioEl.playbackRate = S.rate;
+  if (S.mode === "tts" && S.ttsEngine === "google" && ttsAudio) ttsAudio.playbackRate = S.rate;
   if (S.mode === "yt" && S.ytPlayer && S.ytPlayer.setPlaybackRate) S.ytPlayer.setPlaybackRate(S.rate);
-  if (S.mode === "tts" && S.playing) restartSpeech();
+  if (S.mode === "tts" && S.playing && S.ttsEngine !== "google") restartSpeech();
   var b = curBook();
   if (b && b.type === "text") $("bookMeta").textContent = b.chapters.length + " chương · " + bookWords(b).toLocaleString("vi-VN") + " từ · nghe hết ~" + estMinutes(bookWords(b), S.rate) + " phút ở tốc độ hiện tại";
   renderChapList();
-});
-$("setVoice").addEventListener("change", function(){
-  if (this.value === "") this.removeAttribute("data-manual"); else this.setAttribute("data-manual", "1");
-  if (S.mode === "tts" && S.playing) restartSpeech();
 });
 $("setSleep").addEventListener("change", applySleep);
 $("btnAmb").addEventListener("click", toggleAmbient);
