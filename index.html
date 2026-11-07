@@ -22,6 +22,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       :root{
         --bg:#f4efe6; --panel:#fffdf8; --panel2:#efe8da; --ink:#23201a; --ink2:#5c5546;
@@ -197,7 +198,61 @@
           <button class="btn small" id="btnFolder">Tạo</button>
         </div>
         <div id="libList" style="margin-top:10px"></div>
-        <p class="muted small">Sách trong bản công khai này được giữ trong phiên mở trang hiện tại. Muốn giữ lâu dài, hãy dùng nút “Xuất văn bản sạch” để tải file về máy.</p>
+        <p class="muted small">Sách trong bản công khai này được giữ trong phiên mở trang hiện tại. Muốn giữ lâu dài: đồng bộ lên Google Drive ở mục ngay dưới đây, hoặc dùng nút “Xuất văn bản sạch” để tải file về máy.</p>
+
+        <!-- ============ GOOGLE DRIVE SYNC ============ -->
+        <div style="border:1px solid var(--accent);border-radius:var(--radius);padding:10px;margin-top:12px">
+          <h3 style="margin-top:0">Đồng bộ Google Drive</h3>
+          <p class="small" id="driveStatus">Chưa kết nối Drive. Kết nối xong, mỗi cuốn sách bạn thêm vào, mỗi lần sửa chữ, ghi chú hay báo cáo mới sẽ <b>tự lên Drive ngay lúc đó</b>; ngoài ra web còn tự quét đồng bộ lại mỗi 5 phút để bắt những gì còn sót.</p>
+
+          <label class="lbl" for="driveClientId">Mã ứng dụng Google (Client ID) của bạn</label>
+          <input class="txtin" id="driveClientId" placeholder="….apps.googleusercontent.com" style="width:100%" autocomplete="off" />
+          <details style="margin-top:4px">
+            <summary class="small" style="cursor:pointer">Vì sao cần mã này và lấy ở đâu? (làm một lần, miễn phí)</summary>
+            <p class="small muted">Bản công khai này là trang tĩnh, không có máy chủ giữ “chìa khoá ứng dụng” Google, nên Drive yêu cầu mã ứng dụng của chính bạn — giống cách các app Drive mã nguồn mở vẫn làm. Cách lấy: vào <b>console.cloud.google.com</b> → <i>APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Web application</i> → ở mục <i>Authorized JavaScript origins</i> điền địa chỉ gốc của trang này (ví dụ https://emu2812.github.io) → tạo và dán mã <i>….apps.googleusercontent.com</i> vào ô trên. Mã chỉ giữ trong phiên mở trang, web không lưu lại sau khi đóng trang.</p>
+          </details>
+
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+            <button class="btn small primary" id="btnDriveConnect">Kết nối Google Drive</button>
+            <button class="btn small hidden" id="btnDriveSwitch">Đổi tài khoản Drive</button>
+          </div>
+
+          <div id="driveAccount" class="hidden" style="margin-top:8px">
+            <div class="small">Tài khoản đang đăng nhập: <b id="driveAccountText"></b></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+              <button class="btn small primary" id="btnDrivePin">Dùng tài khoản hiện tại để đồng bộ</button>
+            </div>
+            <div class="small muted" id="drivePinNote" style="margin-top:4px"></div>
+          </div>
+
+          <label class="lbl" for="driveFolderSel">Thư mục trên Drive để đẩy vào</label>
+          <select id="driveFolderSel" style="width:100%" disabled>
+            <option value="">Tự dùng thư mục “Đọc Sách Bằng Giọng Nói”</option>
+          </select>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <input class="txtin" id="driveNewFolder" placeholder="Tên thư mục mới trên Drive" style="flex:1" />
+            <button class="btn small" id="btnDriveFolderNew">Tạo thư mục</button>
+          </div>
+
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn small" id="btnDriveAuto">Tự đồng bộ: Bật</button>
+            <button class="btn small primary" id="btnDriveSyncNow">Đồng bộ ngay</button>
+            <button class="btn small" id="btnDriveReports">Lưu báo cáo lên Drive</button>
+          </div>
+          <p class="small muted" id="driveLast" style="margin-top:6px"></p>
+          <div id="driveSyncedList"></div>
+
+          <h4 style="margin:12px 0 4px;font-size:.95em">Mở file trên Drive như một cuốn sách</h4>
+          <div class="small" id="driveCrumb" style="margin-bottom:4px"></div>
+          <div style="display:flex;gap:6px">
+            <input class="txtin" id="driveSearchQ" placeholder="Tìm file trên toàn Drive…" style="flex:1" />
+            <button class="btn small" id="btnDriveSearch">Tìm</button>
+          </div>
+          <div id="driveBrowseList" style="margin-top:6px">
+            <p class="muted small">Kết nối Drive để duyệt thư mục, mở và chọn bất kỳ file nào đưa vào thư viện.</p>
+          </div>
+          <p class="small muted" style="margin-top:8px">Chưa kết nối được? Bạn vẫn có thể <a href="https://drive.google.com/" target="_blank" rel="noopener">mở Google Drive</a> và tự thả vào đó các file tải về từ nút “Xuất văn bản sạch” / “Lưu báo cáo”.</p>
+        </div>
       </aside>
 
       <!-- ============ READER ============ -->
@@ -371,6 +426,11 @@ function curBook(){ return S.books.find(function(b){ return b.id === S.cur; }) |
 function logEdit(bookId, kind, before, after, note){
   S.log.unshift({ id: uid(), bookId: bookId, kind: kind, before: String(before||"").slice(0,220), after: String(after||"").slice(0,220), note: note || "", time: new Date().toLocaleString("vi-VN") });
   renderLog();
+  // every edit is a change worth syncing to Drive right away (no-op until Drive is connected)
+  if (typeof driveMarkDirty === "function"){
+    driveMarkDirty("report:all");
+    if (bookId){ driveMarkDirty("book:" + bookId + ":report"); driveMarkDirty("book:" + bookId + ":text"); }
+  }
 }
 
 /* ================= VIETNAMESE NUMBER WORDS ================= */
@@ -419,28 +479,61 @@ function intToRoman(n){
   for (var i = 0; i < table.length; i++){ while (n >= table[i][0]){ out += table[i][1]; n -= table[i][0]; } }
   return out;
 }
-/* Guess the book's language from its own text so an English book is not read with a Vietnamese voice */
+/* Guess the book's language from its own text so a book is always read with the voice of
+   ITS OWN language: script first (Hangul -> Korean, kana -> Japanese, Han -> Chinese,
+   Cyrillic -> Russian), then Vietnamese diacritics, then stopword scoring for en/fr/de/es */
 function detectLang(sample){
   var s = String(sample || "").slice(0, 3000);
+  if (/[가-퟿ᄀ-ᇿ]/.test(s)) return "ko";
+  if (/[ぁ-ヿ]/.test(s)) return "ja";
+  if (/[一-鿿]/.test(s)) return "zh";
+  if (/[Ѐ-ӿ]/.test(s)) return "ru";
   var viMarks = (s.match(/[ăâđêôơưàáảãạấầẩẫậắằẳẵặắằẳẵặèéẻẽẹếềểễệìíỉĩịòóỏõọốồổỗộớờởỡợùúủũụứừửữựỳýỷỹỵ]/gi) || []).length;
   if (viMarks >= 3) return "vi";
-  var enWords = (s.toLowerCase().match(/\b(the|and|of|to|in|is|are|was|were|with|for|that|this|from|have|has|not|they|you|will|would|can|could)\b/g) || []).length;
-  if (enWords >= 5) return "en";
-  return null;
+  var low = s.toLowerCase();
+  function count(re){ return (low.match(re) || []).length; }
+  var scores = {
+    en: count(/\b(the|and|of|to|in|is|are|was|were|with|for|that|this|from|have|has|not|they|you|will|would|can|could)\b/g),
+    fr: count(/\b(le|les|des|du|est|dans|pour|avec|qui|une|aux|sur|plus|pas|être|au|ce|cette)\b/g),
+    de: count(/\b(der|die|das|und|ist|ein|eine|nicht|mit|von|den|im|am|für|sich|auch|auf|zu|dem)\b/g),
+    es: count(/\b(el|los|las|es|en|para|con|una|del|por|su|al|se|como|más|está|son)\b/g)
+  };
+  var best = null, bestN = 4;
+  Object.keys(scores).forEach(function(k){ if (scores[k] > bestN){ best = k; bestN = scores[k]; } });
+  return best;
 }
 
 /* ================= SPEECH NORMALIZATION ================= */
+/* A long word typed in ALL CAPS (PROCALCITONIN, a chapter heading SHOUTED in capitals…)
+   is treated by reading voices as an abbreviation and SPELLED OUT letter by letter —
+   exactly the complaint in the reader's screenshot. Fold every all-caps word of 5+
+   letters back to Title Case before the text reaches ANY voice, in EVERY language, so
+   it is read as one whole word ("Procalcitonin"). Short all-caps tokens (<=4 letters)
+   are kept untouched: those are genuine abbreviations (NPK, WHO, CRP, HIV…) that the
+   pronunciation dictionary teaches, and canonical Roman numerals are kept too.
+   The book text itself is never changed — only the copy prepared for the voice. */
+function foldCapsForSpeech(t){
+  return t.replace(/[\p{Lu}]{5,}(?:[-'][\p{Lu}]{2,})*/gu, function(w){
+    if (/^[IVXLCDM]+$/.test(w) && romanToInt(w) && intToRoman(romanToInt(w)) === w) return w;
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  });
+}
 function normalizeForSpeech(text, lang){
-  var t = " " + text + " ";
+  var t = " " + String(text == null ? "" : text).normalize("NFC") + " ";
   // user-taught pronunciations first (longest keys first)
   var keys = Object.keys(S.pron).sort(function(a,b){ return b.length - a.length; });
   keys.forEach(function(k){
     var re = new RegExp("(^|[^\\p{L}\\p{N}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "giu");
     t = t.replace(re, function(m, p1){ return p1 + S.pron[k] + " "; });
   });
+  // fold long ALL-CAPS words for the voice (all languages — this sits before the
+  // Vietnamese-only branch below on purpose, so French/German/Japanese books get it too)
+  t = foldCapsForSpeech(t);
   if (lang && lang.indexOf("vi") !== 0) return t.trim(); // number-word rules below are Vietnamese
   // dates dd/mm/yyyy and dd-mm-yyyy — the year is consumed here so it is not re-read as a plain number
-  t = t.replace(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\b/g, function(m, d, mo, y){
+  t = t.replace(/(ngày\s+)?\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\b/gi, function(m, pre, d, mo, y){
+    // an existing "Ngày" right before the date is consumed and re-emitted once,
+    // so the voice does not read "Ngày ngày bảy tháng…" (verified in the real requests)
     return "ngày " + numWords(d) + " tháng " + numWords(mo) + " năm @YR" + y + "@";
   });
   // time hh:mm / hh giờ mm
@@ -531,6 +624,7 @@ function splitChaptersFromText(raw, fallbackTitle){
   return chapters.filter(function(c){ return c.paras.length || chapters.length === 1; });
 }
 function splitSentences(para){
+  para = String(para == null ? "" : para).normalize("NFC");
   var ABBR = { tp:1, ths:1, ts:1, pgs:1, gs:1, bs:1, ks:1, mr:1, mrs:1, ms:1, dr:1, st:1, vs:1, no:1 };
   var raw = para.match(/[^.!?…]+[.!?…]+["”’)]*\s*|[^.!?…]+$/g) || [para];
   var out = [];
@@ -635,7 +729,9 @@ function addBook(book){
   book.folder = book.folder || "Chưa phân loại";
   if (!book.lang){
     var sampleTxt = book.type === "text" ? book.chapters.map(function(c){ return c.paras.join(" "); }).join(" ") : "";
-    book.lang = detectLang(sampleTxt) || ($("ocrLang").value.indexOf("eng") === 0 ? "en" : "vi");
+    // fall back to the language the reader picked for import/OCR, mapped to a voice language
+    var ocrMap = { vie: "vi", eng: "en", "vie+eng": "vi", fra: "fr", deu: "de", jpn: "ja", kor: "ko", chi_sim: "zh" };
+    book.lang = detectLang(sampleTxt) || ocrMap[$("ocrLang").value] || "vi";
   }
   S.books.push(book);
   if (book.type === "text"){
@@ -645,6 +741,12 @@ function addBook(book){
   renderLibrary();
   openBook(book.id);
   toast("Đã thêm: " + book.title);
+  // a freshly added book syncs to Drive immediately when Drive is connected
+  if (typeof driveMarkDirty === "function"){
+    driveMarkDirty("book:" + book.id + ":text");
+    if (book._file) driveMarkDirty("book:" + book.id + ":orig");
+    driveMarkDirty("book:" + book.id + ":report");
+  }
 }
 async function ocrImage(imageSource, lang){
   if (typeof Tesseract === "undefined") throw new Error("Thư viện OCR chưa tải được (kiểm tra mạng).");
@@ -804,6 +906,7 @@ async function handleFiles(files){
       }
       else { toast("Chưa hỗ trợ định dạng ." + ext); continue; }
       if (book){
+        book._file = book._file || f; // keep the original file so Drive sync can store it as-is
         if (S.pendingPageImg && book.title.indexOf(S.pendingPageImg.bookTitle) === 0){
           if (!S.pageImgs[book.id || (book.id = uid())]) S.pageImgs[book.id] = {};
           S.pageImgs[book.id][0] = S.pendingPageImg.img; S.pendingPageImg = null;
@@ -843,6 +946,7 @@ function renderLibrary(){
       var del = document.createElement("button"); del.className = "btn small danger"; del.textContent = "Xoá";
       del.addEventListener("click", function(){
         stopAll();
+        if (typeof driveTrashBook === "function") driveTrashBook(b.id);
         S.books = S.books.filter(function(x){ return x.id !== b.id; });
         delete S.ads[b.id]; delete S.proof[b.id];
         if (S.cur === b.id){ S.cur = null; }
@@ -874,8 +978,9 @@ function openBook(id){
     ? b.chapters.length + " chương · " + bookWords(b).toLocaleString("vi-VN") + " từ · nghe hết ~" + estMinutes(bookWords(b), S.rate) + " phút ở tốc độ hiện tại"
     : (b.type === "youtube" ? "Video YouTube — phát ngay trong trang, ghi chú gắn theo mốc giây." : "File âm thanh — nghe như một cuốn sách nói có sẵn.");
   renderMedia(b);
+  var LANGNAMES = { vi: "Tiếng Việt", en: "English — giọng Anh/Mỹ", fr: "Français — giọng Pháp", de: "Deutsch — giọng Đức", es: "Español — giọng Tây Ban Nha", ja: "日本語 — giọng Nhật", ko: "한국어 — giọng Hàn", zh: "中文 — giọng Trung", ru: "Русский — giọng Nga" };
+  var vn = $("voiceName"); if (vn) vn.textContent = "Google Dịch · " + (LANGNAMES[b.lang || "vi"] || b.lang);
   renderReader(); renderLibrary(); renderAds(); renderProof(); renderChapList(); renderNotes();
-  refreshVoices();
 }
 function renderMedia(b){
   var box = $("mediaBox");
@@ -991,37 +1096,12 @@ function highlightSent(){
 <script>
 "use strict";
 /* ================= PLAYBACK (TTS) ================= */
-var synth = window.speechSynthesis || null;
-/* No voice picker anywhere: the page reads with the single Google Translate voice (engine below).
-   Device voices are only cached as a silent fallback if that one voice cannot be loaded. */
-function refreshVoices(){
-  if (!synth) return;
-  S.voices = synth.getVoices();
-}
-if (synth) synth.onvoiceschanged = refreshVoices;
-/* Fallback only: score device voices so the single fallback voice is the most natural one available */
-function voiceScore(v, want){
-  if (!v || !v.lang) return -1;
-  var vl = v.lang.toLowerCase().replace(/_/g, "-"), w = String(want || "vi").toLowerCase();
-  var s = -1;
-  if (vl === w) s = 30;
-  else if (vl.indexOf(w) === 0) s = 20;
-  else if (vl.indexOf(w.split("-")[0]) === 0) s = 10;
-  if (s < 0) return -1;
-  var n = (v.name || "").toLowerCase();
-  if (n.indexOf("google") >= 0) s += 6;
-  if (/(natural|neural|premium|enhanced|online)/.test(n)) s += 5;
-  if (/(compact|eloquence)/.test(n)) s -= 4;
-  if (v.default) s += 1;
-  return s;
-}
-function pickVoice(lang){
-  var b = curBook();
-  var want = (b && b.lang) || lang || "vi";
-  var best = null, bs = -1;
-  S.voices.forEach(function(v){ var sc = voiceScore(v, want); if (sc > bs){ bs = sc; best = v; } });
-  return best;
-}
+/* No voice picker and no device voices anywhere: this page reads with the single
+   Google Translate voice (engine below) and nothing else. The browser's built-in
+   speechSynthesis voices are deliberately never used - on many phones the built-in
+   Vietnamese voice is exactly what spelled books out letter by letter whenever it
+   silently took over from a Google load that had been judged "failed". */
+
 /* ================= THE ONE VOICE: GOOGLE TRANSLATE =================
    Playback uses the Google Translate speech endpoint — the same voice as the "listen" button in
    Google Translate — so the reading sounds exactly like Google Dịch, with ONE fixed voice and no
@@ -1044,16 +1124,17 @@ function pickVoice(lang){
       intonation — like a narrator who sees the whole sentence — instead of restarting flat at
       every fragment. The next chunk is prefetched while the current one plays, the highlight
       follows the voice inside a chunk, and a short beat of silence separates paragraphs.
-   3) MANY HOSTS, ONE VOICE + NEVER A WRONG-LANGUAGE VOICE. The same voice is served
+   3) MANY HOSTS, ONE VOICE, AND NO FALLBACK VOICE. The same voice is served
       identically from several Google hostnames; playback sticks to the host that last
       worked and rotates to the next one when a chunk fails to load or play (blocked host,
-      DNS filter, rate limit), retrying the SAME chunk — so one dead hostname no longer
-      kills the voice mid-book. Only after every host has failed does playback fall back
-      to the single best device voice — and ONLY if the device actually has a voice for
-      the book's language. Feeding Vietnamese text to a wrong-language voice is exactly
-      what spells it out letter by letter, so when no matching device voice exists the
-      reader stops with an honest message and pressing Nghe retries the Google voice
-      instead of silently switching to a spelling machine. */
+      DNS filter, rate limit), retrying the SAME chunk - so one dead hostname no longer
+      kills the voice mid-book. If every host still fails, playback STOPS with an honest
+      message and pressing Nghe retries the Google voice; the page never hands the book
+      to a device voice, because a device voice reading Vietnamese badly is precisely
+      the letter-by-letter spelling the reader kept reporting. A slow connection is
+      not a failure either: the stall watch in playGoogleItem only strikes when no
+      audio data has arrived for a full 15 seconds, so a weak-signal phone no longer
+      burns through every host on false verdicts and gets dropped to a spelling voice. */
 function gtLang(lang){
   var l = String(lang || "vi").toLowerCase();
   if (l.indexOf("zh") === 0) return "zh-CN";
@@ -1143,7 +1224,7 @@ function ensureTtsAudio(){
     ttsAudio.addEventListener("ended", function(){
       if (!S.playing || !G.hasAudio || S.ttsEngine !== "google") return;
       var item = G.cur; if (!item) return;
-      if (G.watchdog){ clearTimeout(G.watchdog); G.watchdog = null; }
+      stopStallWatch();
       // an MP3 that "ends" far too fast for its text is not real speech (an empty or
       // blocked reply): treat it as a failed load and rotate hosts instead of racing
       // silently through the whole book a fraction of a second per chunk
@@ -1182,6 +1263,7 @@ function ensureTtsAudio(){
   }
   return ttsAudio;
 }
+function stopStallWatch(){ if (G.watchdog){ clearInterval(G.watchdog); clearTimeout(G.watchdog); G.watchdog = null; } }
 function playGoogleItem(item){
   var b = curBook(); if (!b) return;
   var a = ensureTtsAudio(), gen = G.gen;
@@ -1198,12 +1280,22 @@ function playGoogleItem(item){
     if (e && e.name === "AbortError") return;
     if (attempt === G.attempt && gen === G.gen && S.playing && G.hasAudio) reportChunkFailure();
   });
-  // watchdog: a load whose playback never starts moving within 8 seconds is a failed
-  // load however it fails (some blocks never fire an error event at all)
-  if (G.watchdog) clearTimeout(G.watchdog);
-  G.watchdog = setTimeout(function(){
-    if (attempt === G.attempt && gen === G.gen && S.playing && S.ttsEngine === "google" && G.hasAudio && !G.sawProgress) reportChunkFailure();
-  }, 8000);
+  // stall watch: a SLOW connection is not a failed one. The old fixed 8-second
+  // watchdog struck healthy-but-slow loads, rotated hosts (restarting the same
+  // download from zero each time) and burned through every host in under a minute
+  // on exactly the phones with the weakest signal. Now only a genuine stall
+  // counts: no playback progress AND no data arriving (readyState < 3) for a full
+  // 15 seconds - or a load that has not started at all after 60 seconds.
+  stopStallWatch();
+  var startedAt = Date.now(), lastCt = 0, lastMoveAt = Date.now();
+  G.watchdog = setInterval(function(){
+    if (attempt !== G.attempt || gen !== G.gen || !S.playing || S.ttsEngine !== "google" || !G.hasAudio){ stopStallWatch(); return; }
+    var ct = 0; try { ct = a.currentTime || 0; } catch (e) {}
+    if (ct > lastCt + 0.01){ lastCt = ct; lastMoveAt = Date.now(); }
+    var stalled = (Date.now() - lastMoveAt > 15000 && a.readyState < 3);
+    var neverStarted = (ct === 0 && Date.now() - startedAt > 60000);
+    if (stalled || neverStarted){ stopStallWatch(); reportChunkFailure(); }
+  }, 2000);
 }
 /* Every failure signal for the current chunk (error event, play() rejection, watchdog,
    too-short MP3) funnels through here so ONE failure is handled exactly once, however
@@ -1235,17 +1327,19 @@ function speakGoogle(){
 function haltGoogleAudio(){
   G.gen++; G.hasAudio = false; G.cur = null; G.piece = 0;
   if (G.pauseTimer){ clearTimeout(G.pauseTimer); G.pauseTimer = null; }
-  if (G.watchdog){ clearTimeout(G.watchdog); G.watchdog = null; }
+  stopStallWatch();
   if (ttsAudio){ ttsAudio.pause(); ttsAudio.removeAttribute("src"); try { ttsAudio.load(); } catch (e) {} }
 }
 /* One chunk failed to load or play (blocked hostname, DNS filter, rate limit, dead
    network…). Retry the SAME chunk from the next Google hostname — same voice, same
-   text — and only give up on the Google voice after every host failed for this chunk. */
+   text - and only give up on the Google voice after every host has been tried,
+   plus a couple of extra attempts in case the block was transient. Giving up means
+   stopping (see googleVoiceFailed) - never switching to a device voice. */
 function googleChunkFailed(){
   if (!S.playing || S.ttsEngine !== "google" || !G.cur) return;
-  if (G.watchdog){ clearTimeout(G.watchdog); G.watchdog = null; }
+  stopStallWatch();
   G.strikes++;
-  if (G.strikes <= GT_HOSTS.length){
+  if (G.strikes <= GT_HOSTS.length + 2){
     rotateGtHost();
     G.hasAudio = true;
     playGoogleItem(G.cur);
@@ -1257,127 +1351,24 @@ function googleChunkFailed(){
 function googleVoiceFailed(){
   if (S.ttsEngine !== "google") return;
   haltGoogleAudio();
-  refreshVoices();
-  var b = curBook();
-  var v = b ? pickVoice(b.lang) : null;
-  if (synth && v){
-    S.ttsEngine = "webspeech";
-    var vn = $("voiceName"); if (vn) vn.textContent = "Giọng máy (dự phòng)";
-    toast("Không tải được giọng Google Dịch (mạng?) — tạm đọc bằng giọng có sẵn trong máy.", 5000);
-    if (S.playing) speakCurrent();
-    return;
-  }
-  /* The device has NO voice for this book's language. Feeding the text to a
-     wrong-language voice is exactly what spells Vietnamese out letter by letter, so
-     never do it: stop honestly, keep the Google engine, and let the reader retry. */
+  /* The Google voice is the ONLY voice this page reads with - the reader asked for
+     exactly the Google Dich voice and nothing else. Playback used to fall back here
+     to the device's built-in voice; on phones whose built-in voice handles
+     Vietnamese badly, that fallback is precisely what spelled the book out letter
+     by letter while the label still implied a proper reading voice. So there is no
+     fallback anymore: stop honestly, keep the Google engine, and let one press of
+     Nghe retry the Google voice. */
   S.playing = false; updatePlayBtn();
-  var vn2 = $("voiceName"); if (vn2) vn2.textContent = "Google Dịch — lỗi mạng";
-  toast("Không tải được giọng Google Dịch, và máy này không có giọng đọc cho ngôn ngữ của sách — đọc bằng giọng sai ngôn ngữ sẽ thành đánh vần từng chữ nên web không đọc tiếp. Hãy kiểm tra mạng rồi bấm Nghe để thử lại giọng Google.", 9000);
+  var vn2 = $("voiceName"); if (vn2) vn2.textContent = "Google Dịch — chưa tải được";
+  toast("Chưa tải được giọng Google Dịch — có thể do mạng chậm hoặc bị chặn. Web không đọc bằng giọng máy thay thế, vì giọng đó dễ đọc sai và đánh vần từng chữ. Hãy kiểm tra mạng rồi bấm Nghe để thử lại giọng Google.", 9000);
 }
 function stopTestClip(){ if (S.testAudio){ try { S.testAudio.pause(); } catch (e) {} S.testAudio = null; } }
-/* Fallback engine only (device speechSynthesis): speech is fed in multi-sentence chunks (one
-   utterance per chunk) so the voice keeps natural intonation across sentences instead of restarting
-   flat at every sentence. A generation counter invalidates events from cancelled utterances, which
-   previously advanced the sentence counter a second time and made playback skip sentences. */
-var speakGen = 0;
-var wsStrikes = 0; // consecutive device-voice utterances that failed or "ended" without speaking
-function sentenceSegments(sent, lang){
-  var t = normalizeForSpeech(sent.text, lang);
-  if (!t) return [];
-  if (t.length <= 240) return [t];
-  var segs = [], rest = t;
-  while (rest.length > 240){
-    var cut = Math.max(rest.lastIndexOf("; ", 240), rest.lastIndexOf(", ", 240));
-    if (cut < 60) cut = rest.lastIndexOf(" ", 240);
-    if (cut < 40) break;
-    segs.push(rest.slice(0, cut + 1).trim());
-    rest = rest.slice(cut + 1).trim();
-  }
-  if (rest) segs.push(rest);
-  return segs;
-}
-function buildChunk(fromIdx){
-  var b = curBook(); if (!b) return null;
-  var parts = [], text = "", firstPi = null;
-  for (var i = fromIdx; i < S.sents.length; i++){
-    var s = S.sents[i];
-    if (firstPi === null) firstPi = s.pi;
-    if (s.pi !== firstPi && text.length > 40) break; // natural pause at paragraph end
-    var segs = sentenceSegments(s, b.lang || "vi");
-    for (var k = 0; k < segs.length; k++){
-      var t = segs[k];
-      if (text && text.length + t.length > 230 && parts[parts.length - 1].idx !== i) return { parts: parts, text: text, lastIdx: parts[parts.length - 1].idx };
-      parts.push({ idx: i, start: text ? text.length + 1 : 0, end: 0 });
-      text = text ? text + " " + t : t;
-      parts[parts.length - 1].end = text.length;
-    }
-    if (text.length >= 200 && segs.length) break;
-  }
-  return parts.length ? { parts: parts, text: text, lastIdx: parts[parts.length - 1].idx } : null;
-}
-function speakCurrent(){
-  if (S.ttsEngine === "google"){ speakGoogle(); return; }
-  speakWebSpeech();
-}
-function speakWebSpeech(){
-  var b = curBook(); if (!b || !synth) return;
-  if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
-  var chunk = buildChunk(S.sentIdx);
-  if (!chunk){ S.sentIdx++; speakCurrent(); return; }
-  var gen = ++speakGen;
-  var u = new SpeechSynthesisUtterance(chunk.text);
-  u.rate = S.rate;
-  var v = pickVoice(b.lang); if (v){ u.voice = v; u.lang = v.lang; } else u.lang = (b.lang === "vi" ? "vi-VN" : b.lang);
-  var startedAt = Date.now(), boundarySeen = false;
-  u.onboundary = function(e){
-    if (gen !== speakGen || !S.playing || e.charIndex == null) return;
-    boundarySeen = true;
-    for (var i = 0; i < chunk.parts.length; i++){
-      var p = chunk.parts[i];
-      if (e.charIndex >= p.start && e.charIndex < p.end){
-        if (S.sentIdx !== p.idx){ S.sentIdx = p.idx; highlightSent(); }
-        break;
-      }
-    }
-  };
-  u.onend = function(){
-    if (gen !== speakGen || !S.playing) return;
-    // an utterance that "ends" almost instantly without a single word boundary never
-    // really spoke (unusable device voice / audio route): count it, and stop with an
-    // explanation instead of racing silently through the whole book
-    if (!boundarySeen && Date.now() - startedAt < 400 && chunk.text.length > 30){
-      wsStrikes++;
-      if (wsStrikes >= 2){
-        wsStrikes = 0; stopAll();
-        toast("Giọng đọc của máy không phát được tiếng nên đã dừng, thay vì đọc sai. Hãy thử lại khi có mạng để dùng giọng Google Dịch.", 8000);
-        return;
-      }
-    } else wsStrikes = 0;
-    S.sentIdx = chunk.lastIdx + 1;
-    if (S.sentIdx >= S.sents.length) nextChapterOrStop();
-    else { highlightSent(); speakCurrent(); }
-  };
-  u.onerror = function(e){
-    if (gen !== speakGen || !S.playing) return;
-    if (e.error === "canceled" || e.error === "interrupted") return;
-    wsStrikes++;
-    if (wsStrikes >= 2){
-      wsStrikes = 0; stopAll();
-      toast("Giọng đọc của máy không phát được tiếng nên đã dừng, thay vì đọc sai. Hãy thử lại khi có mạng để dùng giọng Google Dịch.", 8000);
-      return;
-    }
-    S.sentIdx = chunk.lastIdx + 1; highlightSent(); speakCurrent();
-  };
-  synth.speak(u);
-  highlightSent();
-}
-function restartSpeech(){
-  if (S.ttsEngine === "google"){ haltGoogleAudio(); speakCurrent(); return; }
-  if (!synth) return;
-  speakGen++;
-  synth.cancel();
-  speakCurrent();
-}
+/* The Google voice is the only reading engine, so speakCurrent has exactly one
+   implementation. (The device speechSynthesis engine that used to live here was
+   removed entirely: it was the only component in the page capable of producing
+   the letter-by-letter reading the user reported.) */
+function speakCurrent(){ speakGoogle(); }
+function restartSpeech(){ haltGoogleAudio(); speakCurrent(); }
 function nextChapterOrStop(){
   var b = curBook();
   if (S.sleepEndChapter){ stopAll(); toast("Đã hết chương — hẹn giờ tắt kích hoạt."); return; }
@@ -1408,9 +1399,7 @@ function playFrom(i){
   }
 }
 function pauseAll(){
-  speakGen++; // invalidate pending utterance events before cancelling
   S.playing = false; updatePlayBtn();
-  if (synth) synth.cancel();
   if (ttsAudio) ttsAudio.pause();
   if (S.audioEl) S.audioEl.pause();
   if (S.ytPlayer && S.ytPlayer.pauseVideo) S.ytPlayer.pauseVideo();
@@ -1602,7 +1591,7 @@ function renderPron(){
     var t = document.createElement("button"); t.className = "btn small"; t.textContent = "Nghe thử";
     t.addEventListener("click", function(){ testSpeak(k + " — đọc là: " + S.pron[k]); });
     var d = document.createElement("button"); d.className = "btn small danger"; d.textContent = "Xoá";
-    d.addEventListener("click", function(){ delete S.pron[k]; renderPron(); });
+    d.addEventListener("click", function(){ delete S.pron[k]; renderPron(); if (typeof driveMarkDirty === "function") driveMarkDirty("report:all"); });
     row.appendChild(t); row.appendChild(d); div.appendChild(row); host.appendChild(div);
   });
 }
@@ -1611,23 +1600,23 @@ function testSpeak(text){
   var t = normalizeForSpeech(text, "vi");
   if (t.length > 190) t = t.slice(0, 190);
   stopTestClip();
-  var a = gtAudio(gtUrl(t, "vi"));
-  S.testAudio = a;
-  a.playbackRate = S.rate;
-  var fellBack = false;
-  function fb(){
-    if (fellBack) return; fellBack = true;
-    if (!synth){ toast("Không tải được giọng Google Dịch — hãy kiểm tra mạng."); return; }
-    var v = pickVoice("vi");
-    if (!v){ toast("Không tải được giọng Google Dịch và máy không có giọng tiếng Việt — không nghe thử được lúc này."); return; }
-    var u = new SpeechSynthesisUtterance(t);
-    u.rate = S.rate;
-    u.voice = v; u.lang = v.lang;
-    synth.cancel(); synth.speak(u);
+  var tries = 0;
+  function attempt(){
+    var a = gtAudio(gtUrl(t, "vi"));
+    S.testAudio = a;
+    a.playbackRate = S.rate;
+    var done = false;
+    function fb(){
+      if (done) return; done = true;
+      tries++;
+      if (tries <= GT_HOSTS.length){ rotateGtHost(); attempt(); }
+      else toast("Không tải được giọng Google Dịch để nghe thử — hãy kiểm tra mạng rồi thử lại.");
+    }
+    a.addEventListener("error", fb);
+    var p = a.play();
+    if (p && p.catch) p.catch(function(e){ if (!(e && e.name === "AbortError")) fb(); });
   }
-  a.addEventListener("error", fb);
-  var p = a.play();
-  if (p && p.catch) p.catch(fb);
+  attempt();
 }
 
 /* ================= CHAPTERS / NOTES / LOG ================= */
@@ -1669,7 +1658,7 @@ function renderNotes(){
       else if (n.ci != null){ stopAll(); S.chapIdx = n.ci; $("chapSel").value = String(n.ci); renderReader(); S.sentIdx = n.si || 0; highlightSent(); }
     });
     var del = document.createElement("button"); del.className = "btn small danger"; del.textContent = "Xoá";
-    del.addEventListener("click", function(){ S.notes = S.notes.filter(function(x){ return x.id !== n.id; }); renderNotes(); });
+    del.addEventListener("click", function(){ S.notes = S.notes.filter(function(x){ return x.id !== n.id; }); renderNotes(); if (typeof driveMarkDirty === "function"){ driveMarkDirty("report:all"); driveMarkDirty("book:" + b.id + ":report"); } });
     row.appendChild(go); row.appendChild(del); div.appendChild(row); host.appendChild(div);
   });
 }
@@ -1790,6 +1779,7 @@ $("btnSample").addEventListener("click", function(){
     "Chương 1: Vì sao nên nghe sách",
     "Nghe sách giúp bạn tận dụng thời gian đi đường, nấu ăn hay tập thể dục. Một cuốn sách 300 trang tương đương khoảng 10 giờ nghe ở tốc độ thường.",
     "Ngày 07/11/2026, giá một cuốn sách nói là 250.000đ. Diện tích phòng đọc là 25 m². Chương IV của cuốn sách này sẽ nói về thói quen đọc.",
+    "Trong y khoa, chỉ số PROCALCITONIN trong máu giúp bác sĩ đánh giá nguy cơ NHIỄM TRÙNG HUYẾT — bạn hãy nghe thử: hai từ viết hoa này được đọc thành từ hoàn chỉnh, không đánh vần từng chữ cái.",
     "Mẹo nhỏ: bón phân NPK đúng liều, giữ độ pH của đất quanh mức 6,5 và tưới 2 lít nước mỗi ngày cho chậu nhỏ. Mua ngay hôm nay tại www.vidu-quang-cao.example.com hoặc gọi hotline 0901 234 567 để được giảm giá 50%!",
     "Chương 2: Đọc đều mỗi ngày",
     "Chỉ cần 20 phút mỗi ngày, sau một tháng bạn đã nghe xong một cuốn sách vừa. Não bộ ghi nhớ tốt hơn khi bạn vừa nghe vừa nhìn theo câu chữ đang được tô sáng.",
@@ -1831,7 +1821,6 @@ $("setRate").addEventListener("change", function(){
   if (S.mode === "audio" && S.audioEl) S.audioEl.playbackRate = S.rate;
   if (S.mode === "tts" && S.ttsEngine === "google" && ttsAudio) ttsAudio.playbackRate = S.rate;
   if (S.mode === "yt" && S.ytPlayer && S.ytPlayer.setPlaybackRate) S.ytPlayer.setPlaybackRate(S.rate);
-  if (S.mode === "tts" && S.playing && S.ttsEngine !== "google") restartSpeech();
   var b = curBook();
   if (b && b.type === "text") $("bookMeta").textContent = b.chapters.length + " chương · " + bookWords(b).toLocaleString("vi-VN") + " từ · nghe hết ~" + estMinutes(bookWords(b), S.rate) + " phút ở tốc độ hiện tại";
   renderChapList();
@@ -1876,6 +1865,7 @@ $("btnNoteAdd").addEventListener("click", function(){
   if (b.type === "youtube" && S.ytPlayer && S.ytPlayer.getCurrentTime) n.ytTime = S.ytPlayer.getCurrentTime();
   if (b.type === "audio" && S.audioEl) n.ytTime = S.audioEl.currentTime;
   S.notes.unshift(n); $("noteText").value = ""; renderNotes(); toast("Đã lưu ghi chú tại " + n.posLabel + ".");
+  if (typeof driveMarkDirty === "function"){ driveMarkDirty("report:all"); driveMarkDirty("book:" + b.id + ":report"); }
 });
 $("btnExport").addEventListener("click", exportClean);
 
@@ -1899,13 +1889,368 @@ $("btnDoInstall").addEventListener("click", async function(){
   }
 });
 
-/* Chrome can silently pause long TTS sessions (especially in a background tab) — nudge it awake */
-setInterval(function(){
-  if (synth && S.playing && S.mode === "tts" && synth.paused){ try { synth.resume(); } catch (e) {} }
-}, 10000);
-
 renderLibrary(); renderReader(); renderPron(); renderLog(); renderNotes();
-if (synth) refreshVoices();
+</script>
+
+<script>
+"use strict";
+/* ================= GOOGLE DRIVE SYNC =================
+   Direct sign-in to the reader's own Drive from this static page (Google Identity
+   Services token flow + Drive REST v3, full "drive" scope - the reader approves every
+   permission on Google's own consent screen; the page never sees a password and keeps
+   the token only in memory for this session). Sync is event-driven: adding a book,
+   editing text, hiding an ad, changing a pronunciation or a note marks the affected
+   payloads dirty and they upload ~1.5s later. A sweep every 5 minutes re-checks every
+   payload's content hash so anything missed still lands. Each payload updates the SAME
+   Drive file on later syncs (file ids are remembered) - no duplicate copies.
+   This static page has no server holding a Google app key, so the reader pastes their
+   own free OAuth Client ID once (see the help text in the panel); without it the panel
+   says so plainly instead of faking a connection. */
+var D = {
+  token: null, account: null, pinned: "", folderId: "", folderName: "",
+  auto: true, fileIds: {}, hashes: {}, dirty: {}, synced: [], syncing: false,
+  timer: null, browseId: "root", crumb: [{ id: "root", name: "Drive của tôi" }], searching: false
+};
+function driveSafeName(s){ var n = String(s || "Sach").replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/\s+/g, "-"); return n || "Sach"; }
+function driveHash(str){ var h = 5381; for (var i = 0; i < str.length; i++){ h = ((h << 5) + h + str.charCodeAt(i)) | 0; } return "h" + (h >>> 0).toString(36) + ":" + str.length; }
+function driveSetStatus(html){ $("driveStatus").innerHTML = html; }
+function drivePinnedOk(){ return !!(D.account && D.pinned && D.pinned === D.account.email); }
+function driveRefreshPinNote(){
+  var note = $("drivePinNote"); if (!note) return;
+  if (!D.account){ note.textContent = ""; return; }
+  if (!D.pinned) note.textContent = "Chưa chốt tài khoản đồng bộ. Bấm nút trên để chốt đúng tài khoản này — web chỉ đẩy file lên tài khoản đã chốt.";
+  else if (D.pinned !== D.account.email) note.innerHTML = "⚠ Tài khoản đang đăng nhập khác tài khoản đã chốt (<b>" + esc(D.pinned) + "</b>) — đồng bộ đang TẠM DỪNG để không đẩy nhầm tài khoản. Bấm “Dùng tài khoản hiện tại để đồng bộ” nếu bạn muốn chuyển sang tài khoản này.";
+  else note.textContent = "Đã chốt: mọi lần đồng bộ đều lên tài khoản này, vào thư mục đã chọn bên dưới.";
+  $("btnDrivePin").textContent = (D.pinned && D.pinned !== D.account.email) ? "Chuyển sang dùng tài khoản hiện tại" : "Dùng tài khoản hiện tại để đồng bộ";
+}
+async function driveApi(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({ Authorization: "Bearer " + D.token }, opts.headers || {});
+  var res = await fetch("https://www.googleapis.com/drive/v3/" + path, opts);
+  if (res.status === 401) throw new Error("Phiên đăng nhập Drive đã hết hạn — bấm “Kết nối Google Drive” để đăng nhập lại.");
+  return res;
+}
+async function driveApiJson(path, opts){
+  var res = await driveApi(path, opts);
+  if (!res.ok) throw new Error("Drive trả lỗi " + res.status);
+  return res.json();
+}
+function driveConnect(switchAccount){
+  var cid = $("driveClientId").value.trim();
+  if (!cid){ toast("Hãy dán Mã ứng dụng Google (Client ID) vào ô trong mục Drive trước — phần hướng dẫn ngay dưới ô đó chỉ cách lấy miễn phí."); $("driveClientId").focus(); return; }
+  if (typeof google === "undefined" || !google.accounts || !google.accounts.oauth2){
+    toast("Thư viện đăng nhập Google chưa tải được (kiểm tra mạng) — tải lại trang rồi thử lại."); return;
+  }
+  if (switchAccount && D.token){
+    try { google.accounts.oauth2.revoke(D.token, function(){}); } catch (e) {}
+    D.token = null; D.account = null;
+    $("driveAccount").classList.add("hidden"); $("btnDriveSwitch").classList.add("hidden");
+    driveSetStatus("Đã ngắt tài khoản cũ. Chọn tài khoản Drive bạn muốn dùng ở màn hình Google sắp hiện.");
+  }
+  var tc = google.accounts.oauth2.initTokenClient({
+    client_id: cid,
+    scope: "https://www.googleapis.com/auth/drive",
+    prompt: switchAccount ? "select_account" : "",
+    callback: async function(resp){
+      if (resp.error){ toast("Đăng nhập Drive chưa xong: " + resp.error); return; }
+      D.token = resp.access_token;
+      try {
+        var about = await driveApiJson("about?fields=user(displayName,emailAddress)");
+        D.account = { name: about.user.displayName || "", email: about.user.emailAddress || "" };
+        $("driveAccountText").textContent = (D.account.name ? D.account.name + " · " : "") + D.account.email;
+        $("driveAccount").classList.remove("hidden");
+        $("btnDriveSwitch").classList.remove("hidden");
+        driveSetStatus("Đã kết nối Drive bằng tài khoản <b>" + esc(D.account.email) + "</b>." + (drivePinnedOk() ? " Đang đồng bộ vào thư mục đã chọn." : " Hãy chốt tài khoản và chọn thư mục bên dưới."));
+        driveRefreshPinNote();
+        await driveLoadFolders();
+        driveBrowseRender();
+        if (drivePinnedOk()) driveScheduleSync(600);
+      } catch (e){ toast("Đã có mã đăng nhập nhưng chưa đọc được tài khoản Drive: " + e.message); }
+    }
+  });
+  tc.requestAccessToken({ prompt: switchAccount ? "select_account" : "" });
+}
+async function driveLoadFolders(){
+  var sel = $("driveFolderSel");
+  try {
+    var data = await driveApiJson("files?q=" + encodeURIComponent("mimeType='application/vnd.google-apps.folder' and trashed=false") + "&pageSize=100&orderBy=name&fields=files(id,name)");
+    sel.innerHTML = '<option value="">Tự dùng thư mục “Đọc Sách Bằng Giọng Nói”</option>';
+    (data.files || []).forEach(function(f){
+      var o = document.createElement("option"); o.value = f.id; o.textContent = "📁 " + f.name;
+      if (f.id === D.folderId) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.disabled = false;
+  } catch (e){ sel.disabled = true; }
+}
+async function driveEnsureFolder(){
+  if (D.folderId) return D.folderId;
+  var name = "Đọc Sách Bằng Giọng Nói";
+  var data = await driveApiJson("files?q=" + encodeURIComponent("mimeType='application/vnd.google-apps.folder' and trashed=false and name='" + name + "'") + "&fields=files(id,name)");
+  if (data.files && data.files.length){ D.folderId = data.files[0].id; D.folderName = name; return D.folderId; }
+  var created = await driveApiJson("files?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name, mimeType: "application/vnd.google-apps.folder" }) });
+  D.folderId = created.id; D.folderName = name;
+  return D.folderId;
+}
+function driveCleanText(book){
+  var hidden = hiddenAdSet(book.id), out = [book.title, ""];
+  book.chapters.forEach(function(ch, ci){
+    out.push("", ch.title, "");
+    ch.paras.forEach(function(p, pi){ if (!hidden[ci + ":" + pi]) out.push(p, ""); });
+  });
+  return out.join("\n");
+}
+function driveReportText(book){
+  var lines = ["BÁO CÁO ĐỌC SÁCH — " + (book ? book.title : "toàn thư viện"), "Tạo lúc: " + new Date().toLocaleString("vi-VN"), ""];
+  lines.push("== Từ điển phát âm đã dạy ==");
+  var pk = Object.keys(S.pron);
+  if (pk.length) pk.forEach(function(k){ lines.push(k + " → " + S.pron[k]); }); else lines.push("(chưa có)");
+  lines.push("", "== Nhật ký sửa chữ (trước → sau, kèm ghi chú) ==");
+  var logs = S.log.filter(function(l){ return !book || l.bookId === book.id; });
+  if (logs.length) logs.forEach(function(l){ lines.push("[" + l.time + "] " + l.kind + (book ? "" : " · sách " + l.bookId) + "\n  Trước: " + l.before + "\n  Sau: " + l.after + (l.note ? "\n  Ghi chú: " + l.note : "")); });
+  else lines.push("(chưa có lần sửa nào)");
+  lines.push("", "== Ghi chú đọc sách ==");
+  var ns = S.notes.filter(function(n){ return !book || n.bookId === book.id; });
+  if (ns.length) ns.forEach(function(n){ lines.push("• " + n.posLabel + ": " + n.text); }); else lines.push("(chưa có ghi chú)");
+  return lines.join("\n");
+}
+function drivePayload(key){
+  var parts = key.split(":");
+  if (key === "report:all") return { name: "Bao-cao-tong-hop-sua-chu-ghi-chu.txt", blob: new Blob([driveReportText(null)], { type: "text/plain;charset=utf-8" }), hash: driveHash(driveReportText(null)) };
+  var book = S.books.find(function(b){ return b.id === parts[1]; });
+  if (!book) return null;
+  if (parts[2] === "text"){
+    if (book.type !== "text") return null;
+    var txt = driveCleanText(book);
+    return { name: driveSafeName(book.title) + ".txt", blob: new Blob([txt], { type: "text/plain;charset=utf-8" }), hash: driveHash(txt) };
+  }
+  if (parts[2] === "report"){
+    var rt = driveReportText(book);
+    return { name: driveSafeName(book.title) + "-bao-cao.txt", blob: new Blob([rt], { type: "text/plain;charset=utf-8" }), hash: driveHash(rt) };
+  }
+  if (parts[2] === "orig"){
+    if (!book._file) return null;
+    return { name: book._file.name, blob: book._file, hash: driveHash(book._file.name + ":" + book._file.size + ":" + (book._file.lastModified || 0)) };
+  }
+  return null;
+}
+async function driveUpload(key){
+  var p = drivePayload(key);
+  if (!p){ delete D.dirty[key]; return; }
+  if (D.fileIds[key] && D.hashes[key] === p.hash){ delete D.dirty[key]; return; }
+  var folderId = await driveEnsureFolder();
+  var id = D.fileIds[key];
+  if (id){
+    var res = await fetch("https://www.googleapis.com/upload/drive/v3/files/" + id + "?uploadType=media", { method: "PATCH", headers: { Authorization: "Bearer " + D.token }, body: p.blob });
+    if (res.status === 404) id = null;
+    else if (res.status === 401) throw new Error("Phiên đăng nhập Drive đã hết hạn — bấm “Kết nối Google Drive” để đăng nhập lại.");
+    else if (!res.ok) throw new Error("Tải lên Drive lỗi " + res.status);
+  }
+  if (!id){
+    var form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify({ name: p.name, parents: [folderId] })], { type: "application/json" }));
+    form.append("file", p.blob);
+    var res2 = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", { method: "POST", headers: { Authorization: "Bearer " + D.token }, body: form });
+    if (!res2.ok) throw new Error("Tải lên Drive lỗi " + res2.status);
+    var data = await res2.json();
+    D.fileIds[key] = data.id;
+  }
+  D.hashes[key] = p.hash; delete D.dirty[key];
+  D.synced.unshift({ name: p.name, time: new Date().toLocaleTimeString("vi-VN") });
+  driveRenderSynced();
+}
+async function driveSyncNow(force){
+  if (!D.token || !D.account){ if (force) toast("Chưa kết nối Drive — bấm “Kết nối Google Drive” trong mục Đồng bộ trước."); return; }
+  if (!drivePinnedOk()){
+    driveSetStatus("Đồng bộ đang tạm dừng: " + (!D.pinned ? "chưa chốt tài khoản đồng bộ." : "tài khoản đang đăng nhập khác tài khoản đã chốt.") + " Xem dòng lưu ý dưới tên tài khoản.");
+    if (force) toast("Hãy chốt tài khoản đồng bộ trước (nút dưới tên tài khoản).");
+    return;
+  }
+  if (D.syncing) return;
+  if (force) S.books.forEach(function(b){ D.dirty["book:" + b.id + ":text"] = 1; D.dirty["book:" + b.id + ":report"] = 1; if (b._file) D.dirty["book:" + b.id + ":orig"] = 1; });
+  var keys = Object.keys(D.dirty);
+  if (!keys.length){ if (force) toast("Không có gì mới cần đồng bộ — mọi thứ đã ở trên Drive."); return; }
+  D.syncing = true;
+  try {
+    for (var i = 0; i < keys.length; i++) await driveUpload(keys[i]);
+    var folderNote = D.folderName ? " vào thư mục “" + esc(D.folderName) + "”" : "";
+    driveSetStatus("Đã đồng bộ " + keys.length + " mục lên Drive của <b>" + esc(D.account.email) + "</b>" + folderNote + " lúc " + new Date().toLocaleTimeString("vi-VN") + ".");
+    if (force) toast("Đã đồng bộ lên Drive: " + keys.length + " mục.");
+  } catch (e){
+    driveSetStatus("Đồng bộ gặp lỗi: " + esc(e.message));
+    if (force) toast("Đồng bộ lỗi: " + e.message);
+  }
+  D.syncing = false;
+}
+function driveScheduleSync(ms){
+  if (!D.auto) return;
+  clearTimeout(D.timer);
+  D.timer = setTimeout(function(){ driveSyncNow(false); }, ms || 1500);
+}
+/* the hook every change in the page calls: upload, edit, proof fix, note, pronunciation… */
+function driveMarkDirty(key){ D.dirty[key] = 1; driveScheduleSync(1500); }
+async function driveTrashBook(bookId){
+  if (!D.token) return;
+  ["text", "report", "orig"].forEach(function(kind){
+    var id = D.fileIds["book:" + bookId + ":" + kind];
+    if (id){
+      driveApi("files/" + id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) }).catch(function(){});
+      delete D.fileIds["book:" + bookId + ":" + kind]; delete D.hashes["book:" + bookId + ":" + kind];
+    }
+    delete D.dirty["book:" + bookId + ":" + kind];
+  });
+}
+function driveRenderSynced(){
+  var host = $("driveSyncedList");
+  if (!D.synced.length){ host.innerHTML = ""; return; }
+  host.innerHTML = '<p class="small" style="margin:8px 0 2px"><b>Đã đồng bộ lên Drive:</b></p>' + D.synced.slice(0, 12).map(function(s){
+    return '<div class="small muted">✓ ' + esc(s.name) + " · " + esc(s.time) + "</div>";
+  }).join("");
+}
+function driveRenderLast(extra){
+  $("driveLast").textContent = "Tự đồng bộ: " + (D.auto ? "Bật — có thay đổi là đẩy lên ngay" : "Tắt") + " · Lượt quét 5 phút gần nhất: " + (D.lastSweep || "chưa có") + (extra || "");
+}
+/* 5-minute sweep: re-mark everything; unchanged payloads are skipped by content hash */
+setInterval(function(){
+  D.lastSweep = new Date().toLocaleTimeString("vi-VN");
+  if (D.token && drivePinnedOk()){
+    S.books.forEach(function(b){ D.dirty["book:" + b.id + ":text"] = 1; D.dirty["book:" + b.id + ":report"] = 1; if (b._file) D.dirty["book:" + b.id + ":orig"] = 1; });
+    D.dirty["report:all"] = 1;
+    driveSyncNow(false);
+  }
+  driveRenderLast();
+}, 5 * 60 * 1000);
+
+/* ---- Drive file browser: folders, search, import any file into the library ---- */
+function driveRenderCrumb(){
+  $("driveCrumb").innerHTML = D.crumb.map(function(c, i){
+    return (i ? " › " : "") + '<a href="#" data-crumb="' + i + '">' + esc(c.name) + "</a>";
+  }).join("");
+  Array.prototype.forEach.call($("driveCrumb").querySelectorAll("[data-crumb]"), function(a){
+    a.addEventListener("click", function(e){
+      e.preventDefault();
+      var i = parseInt(a.getAttribute("data-crumb"), 10);
+      D.crumb = D.crumb.slice(0, i + 1); D.browseId = D.crumb[i].id; D.searching = false;
+      driveBrowseRender();
+    });
+  });
+}
+async function driveBrowseRender(query){
+  var host = $("driveBrowseList");
+  if (!D.token){ host.innerHTML = '<p class="muted small">Kết nối Drive để duyệt thư mục, mở và chọn bất kỳ file nào đưa vào thư viện.</p>'; return; }
+  driveRenderCrumb();
+  host.innerHTML = '<p class="muted small">Đang liệt kê…</p>';
+  try {
+    var q = query ? ("name contains '" + query.replace(/'/g, "\\'") + "' and trashed=false")
+                  : ("'" + D.browseId + "' in parents and trashed=false");
+    var data = await driveApiJson("files?q=" + encodeURIComponent(q) + "&pageSize=100&orderBy=folder,name&fields=files(id,name,mimeType,size)");
+    var files = data.files || [];
+    if (!files.length){ host.innerHTML = '<p class="muted small">' + (query ? "Không tìm thấy file nào khớp." : "Thư mục này trống.") + "</p>"; return; }
+    host.innerHTML = "";
+    files.forEach(function(f){
+      var isFolder = f.mimeType === "application/vnd.google-apps.folder";
+      var div = document.createElement("div"); div.className = "item"; div.style.cssText = "display:flex;gap:8px;align-items:center;padding:6px 9px";
+      var label = document.createElement("span"); label.style.flex = "1";
+      label.innerHTML = (isFolder ? "📁 " : "📄 ") + esc(f.name) + (f.size ? ' <span class="muted small">(' + Math.max(1, Math.round(f.size / 1024)) + " KB)</span>" : "");
+      div.appendChild(label);
+      var btn = document.createElement("button"); btn.className = "btn small" + (isFolder ? "" : " primary");
+      btn.textContent = isFolder ? "Mở" : "Thêm vào thư viện";
+      btn.addEventListener("click", function(){
+        if (isFolder){ D.crumb.push({ id: f.id, name: f.name }); D.browseId = f.id; D.searching = false; driveBrowseRender(); }
+        else driveImportFile(f);
+      });
+      div.appendChild(btn);
+      host.appendChild(div);
+    });
+  } catch (e){ host.innerHTML = '<p class="muted small">Không liệt kê được: ' + esc(e.message) + "</p>"; }
+}
+async function driveImportFile(f){
+  toast("Đang tải từ Drive: " + f.name, 2500);
+  try {
+    var url, outName = f.name;
+    if (f.mimeType.indexOf("application/vnd.google-apps.") === 0){
+      // native Google files have no raw bytes: export a copy in a readable format
+      var map = {
+        "application/vnd.google-apps.document": ["application/pdf", ".pdf"],
+        "application/vnd.google-apps.presentation": ["application/pdf", ".pdf"],
+        "application/vnd.google-apps.spreadsheet": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"],
+        "application/vnd.google-apps.drawing": ["image/png", ".png"]
+      };
+      var ex = map[f.mimeType];
+      if (!ex){ toast("Loại file Google này (" + f.mimeType + ") chưa đưa thẳng vào thư viện được — hãy xuất bản sao PDF/Word trong Drive rồi chọn bản sao đó."); return; }
+      url = "https://www.googleapis.com/drive/v3/files/" + f.id + "/export?mimeType=" + encodeURIComponent(ex[0]);
+      outName = f.name + ex[1];
+    } else {
+      url = "https://www.googleapis.com/drive/v3/files/" + f.id + "?alt=media";
+    }
+    var res = await fetch(url, { headers: { Authorization: "Bearer " + D.token } });
+    if (!res.ok) throw new Error("Drive trả lỗi " + res.status);
+    var blob = await res.blob();
+    await handleFiles([new File([blob], outName, { type: blob.type || "application/octet-stream" })]);
+  } catch (e){ toast("Không tải được file từ Drive: " + e.message, 6000); }
+}
+
+/* ---- Drive panel wiring ---- */
+$("btnDriveConnect").addEventListener("click", function(){ driveConnect(false); });
+$("btnDriveSwitch").addEventListener("click", function(){ driveConnect(true); });
+$("btnDrivePin").addEventListener("click", function(){
+  if (!D.account) return;
+  D.pinned = D.account.email;
+  driveRefreshPinNote();
+  driveSetStatus("Đã chốt tài khoản <b>" + esc(D.pinned) + "</b> để đồng bộ. Từ giờ có thay đổi là web tự đẩy lên Drive ngay, và quét lại mỗi 5 phút.");
+  S.books.forEach(function(b){ D.dirty["book:" + b.id + ":text"] = 1; D.dirty["book:" + b.id + ":report"] = 1; if (b._file) D.dirty["book:" + b.id + ":orig"] = 1; });
+  D.dirty["report:all"] = 1;
+  driveScheduleSync(400);
+});
+$("driveFolderSel").addEventListener("change", function(){
+  D.folderId = this.value;
+  D.folderName = this.value ? this.selectedOptions[0].textContent.replace(/^📁 /, "") : "";
+  toast(this.value ? ("Sẽ đồng bộ vào thư mục: " + D.folderName) : "Sẽ đồng bộ vào thư mục “Đọc Sách Bằng Giọng Nói”.");
+  if (drivePinnedOk()){ S.books.forEach(function(b){ D.dirty["book:" + b.id + ":text"] = 1; }); driveScheduleSync(600); }
+});
+$("btnDriveFolderNew").addEventListener("click", async function(){
+  var name = $("driveNewFolder").value.trim();
+  if (!name) return;
+  if (!D.token){ toast("Hãy kết nối Drive trước khi tạo thư mục trên Drive."); return; }
+  try {
+    var created = await driveApiJson("files?fields=id,name", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name, mimeType: "application/vnd.google-apps.folder" }) });
+    D.folderId = created.id; D.folderName = name;
+    $("driveNewFolder").value = "";
+    await driveLoadFolders();
+    $("driveFolderSel").value = created.id;
+    toast("Đã tạo và chọn thư mục: " + name);
+    if (drivePinnedOk()) driveScheduleSync(600);
+  } catch (e){ toast("Tạo thư mục lỗi: " + e.message); }
+});
+$("btnDriveAuto").addEventListener("click", function(){
+  D.auto = !D.auto;
+  this.textContent = "Tự đồng bộ: " + (D.auto ? "Bật" : "Tắt");
+  driveRenderLast();
+  if (D.auto) driveScheduleSync(600);
+  toast(D.auto ? "Đã bật tự đồng bộ: có thay đổi là đẩy lên Drive ngay." : "Đã tắt tự đồng bộ. Lượt quét 5 phút cũng sẽ không đẩy gì lên.");
+});
+$("btnDriveSyncNow").addEventListener("click", function(){ driveSyncNow(true); });
+$("btnDriveReports").addEventListener("click", function(){
+  if (!D.token || !drivePinnedOk()){
+    // not connected: hand the reader a real report file to drop into Drive manually
+    var blob = new Blob([driveReportText(null)], { type: "text/plain;charset=utf-8" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Bao-cao-sua-chu-ghi-chu.txt";
+    document.body.appendChild(a); a.click(); a.remove();
+    toast("Chưa kết nối Drive nên web đã tải báo cáo thành file — bạn tự thả file này vào Drive, hoặc kết nối Drive để lần sau báo cáo tự lên.", 7000);
+    return;
+  }
+  D.dirty["report:all"] = 1;
+  S.books.forEach(function(b){ D.dirty["book:" + b.id + ":report"] = 1; });
+  driveSyncNow(true);
+});
+$("btnDriveSearch").addEventListener("click", function(){
+  var q = $("driveSearchQ").value.trim();
+  if (!q){ driveBrowseRender(); return; }
+  D.searching = true;
+  $("driveCrumb").innerHTML = "Kết quả tìm trên toàn Drive cho: <b>" + esc(q) + "</b>";
+  driveBrowseRender(q);
+});
+driveRenderLast();
 </script>
   </body>
 </html>
