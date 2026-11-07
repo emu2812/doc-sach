@@ -983,7 +983,7 @@ function highlightSent(){
   if (el){ el.classList.add("cur"); el.scrollIntoView({ block: "center", behavior: "smooth" }); }
   var total = S.sents.length;
   $("progBar").value = total ? Math.round((S.sentIdx) / total * 100) : 0;
-  $("progText").textContent = total ? ("Câu " + (S.sentIdx + 1) + " / " + total + " của chương · còn ~" +
+  $("progText").textContent = total ? ("Câu " + Math.min(S.sentIdx + 1, total) + " / " + total + " của chương · còn ~" +
     estMinutes(S.sents.slice(S.sentIdx).map(function(s){ return s.text; }).join(" ").split(/\s+/).filter(Boolean).length, S.rate) + " phút") : "Chưa phát";
 }
 </script>
@@ -1044,18 +1044,32 @@ function pickVoice(lang){
       intonation — like a narrator who sees the whole sentence — instead of restarting flat at
       every fragment. The next chunk is prefetched while the current one plays, the highlight
       follows the voice inside a chunk, and a short beat of silence separates paragraphs.
-   Only if the Google voice cannot be loaded at all (network blocked) does playback fall back
-   ONCE to the single best device voice — still no picker — and the player label says so. */
+   3) MANY HOSTS, ONE VOICE + NEVER A WRONG-LANGUAGE VOICE. The same voice is served
+      identically from several Google hostnames; playback sticks to the host that last
+      worked and rotates to the next one when a chunk fails to load or play (blocked host,
+      DNS filter, rate limit), retrying the SAME chunk — so one dead hostname no longer
+      kills the voice mid-book. Only after every host has failed does playback fall back
+      to the single best device voice — and ONLY if the device actually has a voice for
+      the book's language. Feeding Vietnamese text to a wrong-language voice is exactly
+      what spells it out letter by letter, so when no matching device voice exists the
+      reader stops with an honest message and pressing Nghe retries the Google voice
+      instead of silently switching to a spelling machine. */
 function gtLang(lang){
   var l = String(lang || "vi").toLowerCase();
   if (l.indexOf("zh") === 0) return "zh-CN";
   var m = l.match(/^(vi|en|fr|de|es|ja|ko|ru)/);
   return m ? m[1] : "vi";
 }
+/* The same Google voice is served identically from several Google hostnames (verified:
+   one request returns the same MP3 bytes from every host below). Playback sticks to the
+   host that last worked and rotates on failure — see googleChunkFailed. */
+var GT_HOSTS = ["translate.google.com", "translate.googleapis.com", "translate.google.com.vn", "translate.google.co.uk"];
+var gtHostIdx = 0;
 function gtUrl(text, lang){
-  return "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" +
+  return "https://" + GT_HOSTS[gtHostIdx % GT_HOSTS.length] + "/translate_tts?ie=UTF-8&client=tw-ob&tl=" +
     encodeURIComponent(gtLang(lang)) + "&q=" + encodeURIComponent(text);
 }
+function rotateGtHost(){ gtHostIdx = (gtHostIdx + 1) % GT_HOSTS.length; }
 /* Every Google-voice audio element is born here: no Referer, or Google returns 404 HTML
    instead of MP3 (see the note above) and the listener hears the device fallback voice. */
 function gtAudio(url){
@@ -1118,7 +1132,7 @@ function buildItem(startIdx, startPiece){
     paraAfter: (!nextPiece && nextIdx < S.sents.length && S.sents[nextIdx].pi !== para) };
 }
 var ttsAudio = null;
-var G = { gen: 0, cur: null, piece: 0, hasAudio: false, pre: null, pauseTimer: null };
+var G = { gen: 0, cur: null, piece: 0, hasAudio: false, pre: null, pauseTimer: null, watchdog: null, sawProgress: false, strikes: 0, attempt: 0, failHandled: false };
 function ensureTtsAudio(){
   if (!ttsAudio){
     ttsAudio = new Audio();
@@ -1129,6 +1143,13 @@ function ensureTtsAudio(){
     ttsAudio.addEventListener("ended", function(){
       if (!S.playing || !G.hasAudio || S.ttsEngine !== "google") return;
       var item = G.cur; if (!item) return;
+      if (G.watchdog){ clearTimeout(G.watchdog); G.watchdog = null; }
+      // an MP3 that "ends" far too fast for its text is not real speech (an empty or
+      // blocked reply): treat it as a failed load and rotate hosts instead of racing
+      // silently through the whole book a fraction of a second per chunk
+      if (item.text.length >= 60 && ttsAudio.duration && isFinite(ttsAudio.duration) && ttsAudio.duration < item.text.length / 45){
+        reportChunkFailure(); return;
+      }
       G.hasAudio = false;
       S.sentIdx = item.nextIdx; G.piece = item.nextPiece;
       if (S.sentIdx >= S.sents.length){ nextChapterOrStop(); return; }
@@ -1143,9 +1164,10 @@ function ensureTtsAudio(){
     });
     ttsAudio.addEventListener("error", function(){
       if (!S.playing || !G.hasAudio || S.ttsEngine !== "google") return;
-      googleVoiceFailed();
+      reportChunkFailure();
     });
     ttsAudio.addEventListener("timeupdate", function(){
+      if (ttsAudio.currentTime > 0.03) G.sawProgress = true;
       // follow the voice inside the chunk: media position -> character offset -> sentence
       if (!S.playing || S.ttsEngine !== "google" || !G.cur || !ttsAudio.duration) return;
       var pos = (ttsAudio.currentTime / ttsAudio.duration) * G.cur.text.length;
@@ -1165,9 +1187,31 @@ function playGoogleItem(item){
   var a = ensureTtsAudio(), gen = G.gen;
   if ("preservesPitch" in a) a.preservesPitch = true;
   a.playbackRate = S.rate;
+  G.sawProgress = false;
+  var attempt = ++G.attempt; G.failHandled = false;
   a.src = gtUrl(item.text, b.lang || "vi");
   var p = a.play();
-  if (p && p.catch) p.catch(function(){ if (gen === G.gen && S.playing && G.hasAudio) googleVoiceFailed(); });
+  if (p && p.catch) p.catch(function(e){
+    // an AbortError means OUR OWN src change or pause interrupted this play() call —
+    // it is not a load failure, and treating it as one makes retries abort each other
+    // in a cascade that burns every host in milliseconds without ever really trying
+    if (e && e.name === "AbortError") return;
+    if (attempt === G.attempt && gen === G.gen && S.playing && G.hasAudio) reportChunkFailure();
+  });
+  // watchdog: a load whose playback never starts moving within 8 seconds is a failed
+  // load however it fails (some blocks never fire an error event at all)
+  if (G.watchdog) clearTimeout(G.watchdog);
+  G.watchdog = setTimeout(function(){
+    if (attempt === G.attempt && gen === G.gen && S.playing && S.ttsEngine === "google" && G.hasAudio && !G.sawProgress) reportChunkFailure();
+  }, 8000);
+}
+/* Every failure signal for the current chunk (error event, play() rejection, watchdog,
+   too-short MP3) funnels through here so ONE failure is handled exactly once, however
+   many channels report it. */
+function reportChunkFailure(){
+  if (!S.playing || S.ttsEngine !== "google" || !G.hasAudio || G.failHandled) return;
+  G.failHandled = true;
+  googleChunkFailed();
 }
 function prefetchGoogleNext(item){
   var b = curBook(); if (!b) return;
@@ -1182,7 +1226,7 @@ function speakGoogle(){
   var item = buildItem(S.sentIdx, G.piece || 0);
   G.piece = 0;
   if (!item){ nextChapterOrStop(); return; }
-  G.gen++; G.cur = item; G.hasAudio = true;
+  G.gen++; G.cur = item; G.hasAudio = true; G.strikes = 0;
   S.sentIdx = item.first;
   highlightSent();
   playGoogleItem(item);
@@ -1191,20 +1235,44 @@ function speakGoogle(){
 function haltGoogleAudio(){
   G.gen++; G.hasAudio = false; G.cur = null; G.piece = 0;
   if (G.pauseTimer){ clearTimeout(G.pauseTimer); G.pauseTimer = null; }
+  if (G.watchdog){ clearTimeout(G.watchdog); G.watchdog = null; }
   if (ttsAudio){ ttsAudio.pause(); ttsAudio.removeAttribute("src"); try { ttsAudio.load(); } catch (e) {} }
+}
+/* One chunk failed to load or play (blocked hostname, DNS filter, rate limit, dead
+   network…). Retry the SAME chunk from the next Google hostname — same voice, same
+   text — and only give up on the Google voice after every host failed for this chunk. */
+function googleChunkFailed(){
+  if (!S.playing || S.ttsEngine !== "google" || !G.cur) return;
+  if (G.watchdog){ clearTimeout(G.watchdog); G.watchdog = null; }
+  G.strikes++;
+  if (G.strikes <= GT_HOSTS.length){
+    rotateGtHost();
+    G.hasAudio = true;
+    playGoogleItem(G.cur);
+    prefetchGoogleNext(G.cur);
+    return;
+  }
+  googleVoiceFailed();
 }
 function googleVoiceFailed(){
   if (S.ttsEngine !== "google") return;
-  S.ttsEngine = "webspeech";
   haltGoogleAudio();
-  if (!synth){
-    S.playing = false; updatePlayBtn();
-    toast("Không tải được giọng Google Dịch và trình duyệt cũng không có giọng dự phòng. Hãy kiểm tra mạng rồi bấm Nghe lại.", 6000);
+  refreshVoices();
+  var b = curBook();
+  var v = b ? pickVoice(b.lang) : null;
+  if (synth && v){
+    S.ttsEngine = "webspeech";
+    var vn = $("voiceName"); if (vn) vn.textContent = "Giọng máy (dự phòng)";
+    toast("Không tải được giọng Google Dịch (mạng?) — tạm đọc bằng giọng có sẵn trong máy.", 5000);
+    if (S.playing) speakCurrent();
     return;
   }
-  var vn = $("voiceName"); if (vn) vn.textContent = "Giọng máy (dự phòng)";
-  toast("Không tải được giọng Google Dịch (mạng?) — tạm đọc bằng giọng có sẵn trong máy.", 5000);
-  if (S.playing) speakCurrent();
+  /* The device has NO voice for this book's language. Feeding the text to a
+     wrong-language voice is exactly what spells Vietnamese out letter by letter, so
+     never do it: stop honestly, keep the Google engine, and let the reader retry. */
+  S.playing = false; updatePlayBtn();
+  var vn2 = $("voiceName"); if (vn2) vn2.textContent = "Google Dịch — lỗi mạng";
+  toast("Không tải được giọng Google Dịch, và máy này không có giọng đọc cho ngôn ngữ của sách — đọc bằng giọng sai ngôn ngữ sẽ thành đánh vần từng chữ nên web không đọc tiếp. Hãy kiểm tra mạng rồi bấm Nghe để thử lại giọng Google.", 9000);
 }
 function stopTestClip(){ if (S.testAudio){ try { S.testAudio.pause(); } catch (e) {} S.testAudio = null; } }
 /* Fallback engine only (device speechSynthesis): speech is fed in multi-sentence chunks (one
@@ -1212,6 +1280,7 @@ function stopTestClip(){ if (S.testAudio){ try { S.testAudio.pause(); } catch (e
    flat at every sentence. A generation counter invalidates events from cancelled utterances, which
    previously advanced the sentence counter a second time and made playback skip sentences. */
 var speakGen = 0;
+var wsStrikes = 0; // consecutive device-voice utterances that failed or "ended" without speaking
 function sentenceSegments(sent, lang){
   var t = normalizeForSpeech(sent.text, lang);
   if (!t) return [];
@@ -1259,8 +1328,10 @@ function speakWebSpeech(){
   var u = new SpeechSynthesisUtterance(chunk.text);
   u.rate = S.rate;
   var v = pickVoice(b.lang); if (v){ u.voice = v; u.lang = v.lang; } else u.lang = (b.lang === "vi" ? "vi-VN" : b.lang);
+  var startedAt = Date.now(), boundarySeen = false;
   u.onboundary = function(e){
     if (gen !== speakGen || !S.playing || e.charIndex == null) return;
+    boundarySeen = true;
     for (var i = 0; i < chunk.parts.length; i++){
       var p = chunk.parts[i];
       if (e.charIndex >= p.start && e.charIndex < p.end){
@@ -1271,6 +1342,17 @@ function speakWebSpeech(){
   };
   u.onend = function(){
     if (gen !== speakGen || !S.playing) return;
+    // an utterance that "ends" almost instantly without a single word boundary never
+    // really spoke (unusable device voice / audio route): count it, and stop with an
+    // explanation instead of racing silently through the whole book
+    if (!boundarySeen && Date.now() - startedAt < 400 && chunk.text.length > 30){
+      wsStrikes++;
+      if (wsStrikes >= 2){
+        wsStrikes = 0; stopAll();
+        toast("Giọng đọc của máy không phát được tiếng nên đã dừng, thay vì đọc sai. Hãy thử lại khi có mạng để dùng giọng Google Dịch.", 8000);
+        return;
+      }
+    } else wsStrikes = 0;
     S.sentIdx = chunk.lastIdx + 1;
     if (S.sentIdx >= S.sents.length) nextChapterOrStop();
     else { highlightSent(); speakCurrent(); }
@@ -1278,6 +1360,12 @@ function speakWebSpeech(){
   u.onerror = function(e){
     if (gen !== speakGen || !S.playing) return;
     if (e.error === "canceled" || e.error === "interrupted") return;
+    wsStrikes++;
+    if (wsStrikes >= 2){
+      wsStrikes = 0; stopAll();
+      toast("Giọng đọc của máy không phát được tiếng nên đã dừng, thay vì đọc sai. Hãy thử lại khi có mạng để dùng giọng Google Dịch.", 8000);
+      return;
+    }
     S.sentIdx = chunk.lastIdx + 1; highlightSent(); speakCurrent();
   };
   synth.speak(u);
@@ -1307,7 +1395,7 @@ function playFrom(i){
       S.playing = true; updatePlayBtn();
       ttsAudio.playbackRate = S.rate;
       var rp = ttsAudio.play();
-      if (rp && rp.catch) rp.catch(function(){ googleVoiceFailed(); });
+      if (rp && rp.catch) rp.catch(function(e){ if (!(e && e.name === "AbortError")) reportChunkFailure(); });
       setupMediaSession(b);
       return;
     }
@@ -1530,9 +1618,11 @@ function testSpeak(text){
   function fb(){
     if (fellBack) return; fellBack = true;
     if (!synth){ toast("Không tải được giọng Google Dịch — hãy kiểm tra mạng."); return; }
+    var v = pickVoice("vi");
+    if (!v){ toast("Không tải được giọng Google Dịch và máy không có giọng tiếng Việt — không nghe thử được lúc này."); return; }
     var u = new SpeechSynthesisUtterance(t);
     u.rate = S.rate;
-    var v = pickVoice("vi"); if (v){ u.voice = v; u.lang = v.lang; } else u.lang = "vi-VN";
+    u.voice = v; u.lang = v.lang;
     synth.cancel(); synth.speak(u);
   }
   a.addEventListener("error", fb);
