@@ -1,0 +1,10 @@
+name = "doc-sach"
+main = "worker.mjs"
+compatibility_date = "2026-11-08"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "AUTH"
+id = "798d9a7160fa47038fc2cf6117bd5de8"
