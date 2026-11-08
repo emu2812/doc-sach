@@ -342,8 +342,8 @@ function driveNotReadyPage() {
 <body>
   <div class="card">
     <h1>☁ Đồng bộ Google Drive chưa được kích hoạt</h1>
-    <p>Web đọc sách vẫn chạy bình thường. Riêng phần đồng bộ Drive cần cài thêm chìa khóa Google ở máy chủ — bước này đang để hoãn theo lựa chọn của chủ trang.</p>
-    <p>Khi chủ trang muốn dùng Drive, việc kích hoạt chỉ làm một lần, sau đó nút Kết nối sẽ đăng nhập thẳng bằng tài khoản Google.</p>
+    <p>Web đọc sách vẫn chạy bình thường. Riêng phần đồng bộ Drive cần cài thêm chìa khóa Google ở máy chủ — bước kích hoạt đã được chủ trang yêu cầu và đang được tiến hành.</p>
+    <p>Khi kích hoạt xong, nút Kết nối sẽ đăng nhập thẳng bằng tài khoản Google ngay trên trang này.</p>
     <a class="btn" href="/">← Quay lại trang đọc sách</a>
   </div>
 </body>
