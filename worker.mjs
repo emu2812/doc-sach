@@ -318,9 +318,39 @@ function escapeQ(s) {
 
 // ---------------------------------------------------------------------------
 
+function driveNotReadyPage() {
+  const html = `<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Đồng bộ Google Drive chưa kích hoạt — Đọc Sách Bằng Giọng Nói</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #faf6ef; color: #26221c; padding: 16px; box-sizing: border-box; }
+  .card { max-width: 430px; background: #fff; border: 1px solid #e3dacb; border-radius: 14px; padding: 24px 22px; box-shadow: 0 4px 24px rgba(60,45,20,.08); }
+  h1 { font-size: 20px; margin: 0 0 10px; }
+  p { line-height: 1.55; margin: 0 0 12px; }
+  a.btn { display: inline-block; margin-top: 6px; background: #7c4a12; color: #fff; text-decoration: none; padding: 11px 18px; border-radius: 9px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>☁ Đồng bộ Google Drive chưa được kích hoạt</h1>
+    <p>Web đọc sách vẫn chạy bình thường. Riêng phần đồng bộ Drive cần cài thêm chìa khóa Google ở máy chủ — bước này đang để hoãn theo lựa chọn của chủ trang.</p>
+    <p>Khi chủ trang muốn dùng Drive, việc kích hoạt chỉ làm một lần, sau đó nút Kết nối sẽ đăng nhập thẳng bằng tài khoản Google.</p>
+    <a class="btn" href="/">← Quay lại trang đọc sách</a>
+  </div>
+</body>
+</html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
 async function handleLogin(env) {
   const problem = configProblem(env);
-  if (problem) return json({ error: "not_configured", message: problem }, 503);
+  if (problem) return driveNotReadyPage();
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: REDIRECT_URI,
@@ -334,7 +364,7 @@ async function handleLogin(env) {
 
 async function handleCallback(env, url) {
   const problem = configProblem(env);
-  if (problem) return json({ error: "not_configured", message: problem }, 503);
+  if (problem) return driveNotReadyPage();
   const oauthError = url.searchParams.get("error");
   if (oauthError) {
     return json({ error: "oauth_denied", message: "Google trả lỗi: " + oauthError }, 400);
