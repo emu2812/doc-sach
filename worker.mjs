@@ -746,7 +746,7 @@ async function handleMegaApi(request) {
       return json({ error: "Yêu cầu MEGA không hợp lệ." }, 400);
     }
     const sid = Math.floor(Math.random() * 1e9).toString();
-    const res = await fetch("https://api.mega.co.nz/cs?id=" + sid, {
+    const res = await fetch("https://g.api.mega.co.nz/cs?id=" + sid, {
       method: "POST",
       headers: { "content-type": "application/json", "User-Agent": CLOUD_BROWSER_UA },
       body: JSON.stringify(parsed),
